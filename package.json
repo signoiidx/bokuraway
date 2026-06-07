@@ -2,12 +2,16 @@
   "name": "bokuraway",
   "version": "0.1.0",
   "description": "BMS practice helper using Bokutachi API",
-  "main": "main.js",
+  "main": "dist/main.js",
   "scripts": {
-    "start": "electron ."
+    "build": "tsc",
+    "start": "npm run build && electron .",
+    "dev": "tsc --watch"
   },
   "devDependencies": {
-    "electron": "^36.3.1"
+    "@types/node": "^25.9.2",
+    "electron": "^36.3.1",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "axios": "^1.9.0",

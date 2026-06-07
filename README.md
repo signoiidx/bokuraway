@@ -1,12 +1,14 @@
 # bokuraway
 
-BMS (Beat Music Simulator) プレイヤーのための練習サポートデスクトップアプリ。[Bokutachi](https://boku.tachi.ac) のスコアデータをもとに、次に狙うべき譜面をレコメンドします。
+Bokutachi IRユーザのための練習サポートデスクトップアプリ。[Bokutachi](https://boku.tachi.ac) のスコアデータをもとに、次に狙うべき譜面をレコメンドします。
 
 ## 機能
 
-- **レコメンド** — CLEAR済みでHARD CLEARがまだの譜面、およびまだCLEARできていない譜面を難易度順に一覧表示
-- **スコア一覧** — 全7K PBをランプ別にフィルタリングして表示
-- **統計** — 難易度レベル × ランプの集計テーブル
+- 試験的に追加した機能のため、今後人手で機能を検討し、変更予定あり。
+
+  - **レコメンド** — CLEAR済みでHARD CLEARがまだの譜面、およびまだCLEARできていない譜面を難易度順に一覧表示
+  - **スコア一覧** — 全7K PBをランプ別にフィルタリングして表示
+  - **統計** — 難易度レベル × ランプの集計テーブル
 
 ## セットアップ
 
@@ -48,13 +50,13 @@ npm start
 ## 技術構成
 
 | ファイル | 役割 |
-|---|---|
-| `main.js` | Electron メインプロセス。OAuthサーバー、Bokutachi API 呼び出し、IPC ハンドラ |
+| --- | --- |
+| `main.js` | Electron メインプロセス。OAuthサーバ、Bokutachi API 呼び出し、IPC ハンドラ |
 | `preload.js` | コンテキストブリッジ。`window.tachi` を renderer に公開 |
-| `index.html` | レンダラー。HTML / CSS / JS をすべて含む単一ファイル |
+| `index.html` | レンダラ。HTML / CSS / JS をすべて含む単一ファイル |
 
 ビルドステップなし。Electron がファイルを直接ロードします。
 
 ## ライセンス
 
-MIT
+MIT License

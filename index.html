@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bokuraway</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Noto+Sans+JP:wght@400;500&display=swap');
+
+  :root {
+    --bg:        #0f0f14;
+    --surface:   #17171f;
+    --surface2:  #1e1e2a;
+    --border:    #2a2a3a;
+    --accent:    #7c6aff;
+    --accent2:   #ff6a9b;
+    --text:      #d8d8e8;
+    --muted:     #6a6a82;
+    --success:   #4affa0;
+    --warn:      #ffcc4a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── titlebar ── */
+  #titlebar {
+    height: 40px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    -webkit-app-region: drag;
+    user-select: none;
+    flex-shrink: 0;
+  }
+  #titlebar .logo {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  #titlebar .user-info {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--muted);
+    -webkit-app-region: no-drag;
+  }
+
+  /* ── layout ── */
+  #app {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── auth screen ── */
+  #auth-screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+  }
+  #auth-screen h1 {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: 6px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  #auth-screen p {
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  /* ── main screen ── */
+  #main-screen {
+    display: none;
+    flex: 1;
+    overflow: hidden;
+  }
+  #main-screen.active {
+    display: flex;
+  }
+
+  /* ── sidebar ── */
+  #sidebar {
+    width: 200px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 16px 0;
+    flex-shrink: 0;
+  }
+  .nav-item {
+    padding: 10px 20px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: color .15s, background .15s;
+    border-left: 2px solid transparent;
+  }
+  .nav-item:hover { color: var(--text); background: var(--surface2); }
+  .nav-item.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: rgba(124,106,255,.08);
+  }
+  .nav-icon { font-size: 16px; }
+
+  /* ── content ── */
+  #content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px;
+  }
+  #content::-webkit-scrollbar { width: 6px; }
+  #content::-webkit-scrollbar-track { background: transparent; }
+  #content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  .page-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+    color: #fff;
+  }
+  .page-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+
+  /* ── buttons ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 24px;
+    border-radius: 6px;
+    border: none;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: opacity .15s, transform .1s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn:active { transform: scale(.97); }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #5b4de0);
+    color: #fff;
+  }
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  /* ── cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  /* ── recommend list ── */
+  .score-list { display: flex; flex-direction: column; gap: 8px; }
+  .score-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    align-items: center;
+    gap: 14px;
+    transition: border-color .15s;
+  }
+  .score-item:hover { border-color: var(--accent); }
+  .score-rank {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--muted);
+    text-align: center;
+  }
+  .score-title {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .score-meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+  .lamp-badge {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+    letter-spacing: 1px;
+  }
+  .lamp-CLEAR  { background: rgba(74,255,160,.15); color: var(--success); }
+  .lamp-EASY   { background: rgba(255,204,74,.15); color: var(--warn); }
+  .lamp-FAILED { background: rgba(255,106,155,.15); color: var(--accent2); }
+
+  /* ── loading / status ── */
+  .status {
+    font-size: 13px;
+    color: var(--muted);
+    padding: 32px 0;
+    text-align: center;
+  }
+  .dot-loader::after {
+    content: '';
+    animation: dots 1.2s steps(4,end) infinite;
+  }
+  @keyframes dots {
+    0%,100% { content: ''; }
+    25% { content: '.'; }
+    50% { content: '..'; }
+    75% { content: '...'; }
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; letter-spacing: 1px; text-transform: uppercase; }
+  .stat-value { font-family: 'Rajdhani', sans-serif; font-size: 28px; font-weight: 700; color: #fff; }
+</style>
+</head>
+<body>
+
+<div id="titlebar">
+  <span class="logo">BOKURAWAY</span>
+  <span class="user-info" id="user-chip"></span>
+</div>
+
+<div id="app">
+
+  <!-- 認証画面 -->
+  <div id="auth-screen">
+    <h1>BOKURAWAY</h1>
+    <p>Bokutachiアカウントでログインして、BMS上達をサポートします</p>
+    <button class="btn btn-primary" id="btn-login">⚡ Bokutachiでログイン</button>
+    <p id="auth-status" style="font-size:12px;color:var(--muted);min-height:20px"></p>
+  </div>
+
+  <!-- メイン画面 -->
+  <div id="main-screen">
+    <nav id="sidebar">
+      <div class="nav-item active" data-page="recommend">
+        <span class="nav-icon">🎯</span> レコメンド
+      </div>
+      <div class="nav-item" data-page="scores">
+        <span class="nav-icon">📊</span> スコア一覧
+      </div>
+    </nav>
+
+    <div id="content">
+      <!-- レコメンドページ -->
+      <div class="page active" id="page-recommend">
+        <div class="page-title">NEXT CHALLENGE</div>
+        <div class="page-sub">CLEARは取れているがHARD CLEARが未達の曲です</div>
+        <div id="recommend-stats" class="stat-grid"></div>
+        <div class="score-list" id="recommend-list">
+          <div class="status dot-loader">読み込み中</div>
+        </div>
+      </div>
+
+      <!-- スコアページ -->
+      <div class="page" id="page-scores">
+        <div class="page-title">SCORE LIST</div>
+        <div class="page-sub">取得済みスコアの一覧</div>
+        <div class="score-list" id="score-list">
+          <div class="status dot-loader">読み込み中</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let currentUser = null;
+
+// ── nav ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('page-' + el.dataset.page).classList.add('active');
+  });
+});
+
+// ── auth ─────────────────────────────────────────────────────────────────────
+document.getElementById('btn-login').addEventListener('click', async () => {
+  const status = document.getElementById('auth-status');
+  status.textContent = 'ブラウザを開いています…';
+  const result = await window.tachi.startOAuth();
+  if (!result.success) {
+    status.textContent = 'エラー: ' + result.error;
+    return;
+  }
+  status.textContent = 'ユーザー情報を取得中…';
+  try {
+    const me = await window.tachi.getMe();
+    currentUser = me.user;
+    document.getElementById('user-chip').textContent = currentUser.username;
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('main-screen').classList.add('active');
+    loadRecommend();
+    loadScores();
+  } catch(e) {
+    status.textContent = 'ユーザー情報の取得に失敗しました';
+  }
+});
+
+// ── lamp badge ───────────────────────────────────────────────────────────────
+function lampBadge(lamp) {
+  const cls = lamp?.replace(' ', '') === 'FULLCOMBO' ? 'lamp-FC' :
+              lamp === 'HARD' ? 'lamp-CLEAR' :
+              lamp === 'CLEAR' ? 'lamp-CLEAR' :
+              lamp === 'EASY' ? 'lamp-EASY' : 'lamp-FAILED';
+  return `<span class="lamp-badge ${cls}">${lamp ?? '?'}</span>`;
+}
+
+// ── recommend ─────────────────────────────────────────────────────────────────
+async function loadRecommend() {
+  const list = document.getElementById('recommend-list');
+  const stats = document.getElementById('recommend-stats');
+  try {
+    const scores = await window.tachi.getRecommend(currentUser.id);
+    stats.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-label">候補曲数</div>
+        <div class="stat-value">${scores.length}</div>
+      </div>`;
+
+    if (scores.length === 0) {
+      list.innerHTML = '<div class="status">候補曲がありません。もっとプレイしてみましょう！</div>';
+      return;
+    }
+
+    list.innerHTML = scores.map((s, i) => `
+      <div class="score-item">
+        <div class="score-rank">${i + 1}</div>
+        <div>
+          <div class="score-title">${s.chart?.songTitle ?? s.chartID}</div>
+          <div class="score-meta">Lv.${s.chart?.level ?? '?'} &nbsp;·&nbsp; ${s.chart?.difficulty ?? ''}</div>
+        </div>
+        ${lampBadge(s.scoreData?.lamp)}
+      </div>`).join('');
+  } catch(e) {
+    list.innerHTML = `<div class="status">取得エラー: ${e.message}</div>`;
+  }
+}
+
+// ── scores ────────────────────────────────────────────────────────────────────
+async function loadScores() {
+  const list = document.getElementById('score-list');
+  try {
+    const data = await window.tachi.getScores(currentUser.id);
+    const scores = data.scores ?? [];
+    if (scores.length === 0) {
+      list.innerHTML = '<div class="status">スコアが見つかりませんでした</div>';
+      return;
+    }
+    list.innerHTML = scores.slice(0, 50).map((s, i) => `
+      <div class="score-item">
+        <div class="score-rank">${i + 1}</div>
+        <div>
+          <div class="score-title">${s.chart?.songTitle ?? s.chartID}</div>
+          <div class="score-meta">Lv.${s.chart?.level ?? '?'}</div>
+        </div>
+        ${lampBadge(s.scoreData?.lamp)}
+      </div>`).join('');
+  } catch(e) {
+    list.innerHTML = `<div class="status">取得エラー: ${e.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>

@@ -16,8 +16,13 @@
     --accent2:   #ff6a9b;
     --text:      #d8d8e8;
     --muted:     #6a6a82;
-    --success:   #4affa0;
-    --warn:      #ffcc4a;
+    --c-fc:      #ff9cf5;
+    --c-exhard:  #ff5f5f;
+    --c-hard:    #4affa0;
+    --c-clear:   #6ac8ff;
+    --c-easy:    #ffcc4a;
+    --c-assist:  #aaaaaa;
+    --c-failed:  #ff6a9b;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -61,11 +66,7 @@
   }
 
   /* ── layout ── */
-  #app {
-    flex: 1;
-    display: flex;
-    overflow: hidden;
-  }
+  #app { flex: 1; display: flex; overflow: hidden; }
 
   /* ── auth screen ── */
   #auth-screen {
@@ -85,20 +86,11 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
-  #auth-screen p {
-    color: var(--muted);
-    font-size: 14px;
-  }
+  #auth-screen p { color: var(--muted); font-size: 14px; }
 
   /* ── main screen ── */
-  #main-screen {
-    display: none;
-    flex: 1;
-    overflow: hidden;
-  }
-  #main-screen.active {
-    display: flex;
-  }
+  #main-screen { display: none; flex: 1; overflow: hidden; }
+  #main-screen.active { display: flex; }
 
   /* ── sidebar ── */
   #sidebar {
@@ -122,19 +114,11 @@
     border-left: 2px solid transparent;
   }
   .nav-item:hover { color: var(--text); background: var(--surface2); }
-  .nav-item.active {
-    color: var(--accent);
-    border-left-color: var(--accent);
-    background: rgba(124,106,255,.08);
-  }
+  .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(124,106,255,.08); }
   .nav-icon { font-size: 16px; }
 
   /* ── content ── */
-  #content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 28px;
-  }
+  #content { flex: 1; overflow-y: auto; padding: 28px; }
   #content::-webkit-scrollbar { width: 6px; }
   #content::-webkit-scrollbar-track { background: transparent; }
   #content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
@@ -150,11 +134,7 @@
     margin-bottom: 6px;
     color: #fff;
   }
-  .page-sub {
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 24px;
-  }
+  .page-sub { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
 
   /* ── buttons ── */
   .btn {
@@ -173,42 +153,69 @@
   }
   .btn:hover { opacity: .85; }
   .btn:active { transform: scale(.97); }
-  .btn-primary {
-    background: linear-gradient(135deg, var(--accent), #5b4de0);
-    color: #fff;
-  }
-  .btn-outline {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text);
-  }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), #5b4de0); color: #fff; }
 
-  /* ── cards ── */
-  .card {
+  /* ── stat grid ── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 20px;
-    margin-bottom: 16px;
+    border-radius: 8px;
+    padding: 14px 16px;
   }
+  .stat-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; letter-spacing: 1px; text-transform: uppercase; }
+  .stat-value { font-family: 'Rajdhani', sans-serif; font-size: 26px; font-weight: 700; color: #fff; }
+  .stat-value.c-fc     { color: var(--c-fc); }
+  .stat-value.c-hard   { color: var(--c-hard); }
+  .stat-value.c-clear  { color: var(--c-clear); }
+  .stat-value.c-easy   { color: var(--c-easy); }
 
-  /* ── recommend list ── */
-  .score-list { display: flex; flex-direction: column; gap: 8px; }
+  /* ── tab bar ── */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    padding: 8px 18px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── score list ── */
+  .score-list { display: flex; flex-direction: column; gap: 6px; }
   .score-item {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 14px 18px;
+    padding: 11px 16px;
     display: grid;
-    grid-template-columns: 40px 1fr auto;
+    grid-template-columns: 30px 1fr auto;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
     transition: border-color .15s;
   }
   .score-item:hover { border-color: var(--accent); }
   .score-rank {
     font-family: 'Rajdhani', sans-serif;
-    font-size: 20px;
+    font-size: 17px;
     font-weight: 700;
     color: var(--muted);
     text-align: center;
@@ -220,56 +227,113 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .score-meta {
+  .score-artist {
     font-size: 11px;
     color: var(--muted);
-    margin-top: 3px;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
+  .score-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .score-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+
+  /* ── lamp badge ── */
   .lamp-badge {
     font-family: 'Rajdhani', sans-serif;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 4px;
-    white-space: nowrap;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 3px;
     letter-spacing: 1px;
+    white-space: nowrap;
   }
-  .lamp-CLEAR  { background: rgba(74,255,160,.15); color: var(--success); }
-  .lamp-EASY   { background: rgba(255,204,74,.15); color: var(--warn); }
-  .lamp-FAILED { background: rgba(255,106,155,.15); color: var(--accent2); }
+  .lamp-FC     { background: rgba(255,156,245,.15); color: var(--c-fc); }
+  .lamp-EXHARD { background: rgba(255,95,95,.15);   color: var(--c-exhard); }
+  .lamp-HARD   { background: rgba(74,255,160,.15);  color: var(--c-hard); }
+  .lamp-CLEAR  { background: rgba(106,200,255,.15); color: var(--c-clear); }
+  .lamp-EASY   { background: rgba(255,204,74,.15);  color: var(--c-easy); }
+  .lamp-ASSIST { background: rgba(170,170,170,.15); color: var(--c-assist); }
+  .lamp-FAILED { background: rgba(255,106,155,.15); color: var(--c-failed); }
 
-  /* ── loading / status ── */
-  .status {
-    font-size: 13px;
+  /* ── level badge ── */
+  .lv-badge {
+    display: inline-block;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
     color: var(--muted);
-    padding: 32px 0;
-    text-align: center;
-  }
-  .dot-loader::after {
-    content: '';
-    animation: dots 1.2s steps(4,end) infinite;
-  }
-  @keyframes dots {
-    0%,100% { content: ''; }
-    25% { content: '.'; }
-    50% { content: '..'; }
-    75% { content: '...'; }
   }
 
-  .stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-  .stat-card {
+  /* ── filter bar ── */
+  .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .filter-btn {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all .15s;
   }
-  .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; letter-spacing: 1px; text-transform: uppercase; }
-  .stat-value { font-family: 'Rajdhani', sans-serif; font-size: 28px; font-weight: 700; color: #fff; }
+  .filter-btn:hover { color: var(--text); border-color: var(--accent); }
+  .filter-btn.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+
+  /* ── stats table ── */
+  .stats-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .stats-table th {
+    text-align: center;
+    padding: 8px 10px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--muted);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .stats-table th:first-child { text-align: left; }
+  .stats-table td {
+    padding: 7px 10px;
+    text-align: center;
+    border-bottom: 1px solid rgba(42,42,58,.4);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--border);
+  }
+  .stats-table td:first-child { text-align: left; font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; color: var(--text); }
+  .stats-table td:last-child { color: var(--muted); font-size: 13px; }
+  .stats-table tr:hover td { background: rgba(255,255,255,.015); }
+  .cell-fc     { color: var(--c-fc)     !important; }
+  .cell-exhard { color: var(--c-exhard) !important; }
+  .cell-hard   { color: var(--c-hard)   !important; }
+  .cell-clear  { color: var(--c-clear)  !important; }
+  .cell-easy   { color: var(--c-easy)   !important; }
+  .cell-assist { color: var(--c-assist) !important; }
+  .cell-failed { color: var(--c-failed) !important; }
+
+  /* ── status / loader ── */
+  .status { font-size: 13px; color: var(--muted); padding: 40px 0; text-align: center; }
+  .dot-loader::after {
+    content: '';
+    animation: dots 1.2s steps(4, end) infinite;
+  }
+  @keyframes dots {
+    0%, 100% { content: ''; }
+    25%       { content: '.'; }
+    50%       { content: '..'; }
+    75%       { content: '...'; }
+  }
 </style>
 </head>
 <body>
@@ -295,18 +359,36 @@
       <div class="nav-item active" data-page="recommend">
         <span class="nav-icon">🎯</span> レコメンド
       </div>
+      <div class="nav-item" data-page="stats">
+        <span class="nav-icon">📈</span> ランプ統計
+      </div>
       <div class="nav-item" data-page="scores">
         <span class="nav-icon">📊</span> スコア一覧
       </div>
     </nav>
 
     <div id="content">
+
       <!-- レコメンドページ -->
       <div class="page active" id="page-recommend">
         <div class="page-title">NEXT CHALLENGE</div>
-        <div class="page-sub">CLEARは取れているがHARD CLEARが未達の曲です</div>
+        <div class="page-sub">上達のための次の一手をレコメンド</div>
         <div id="recommend-stats" class="stat-grid"></div>
+        <div class="tab-bar">
+          <button class="tab active" data-tab="toHard">HARD CLEAR 狙い</button>
+          <button class="tab" data-tab="toClear">CLEAR 狙い</button>
+        </div>
         <div class="score-list" id="recommend-list">
+          <div class="status dot-loader">読み込み中</div>
+        </div>
+      </div>
+
+      <!-- ランプ統計ページ -->
+      <div class="page" id="page-stats">
+        <div class="page-title">LAMP STATS</div>
+        <div class="page-sub">難易度別クリアランプ分布</div>
+        <div id="stats-totals" class="stat-grid"></div>
+        <div id="stats-table-wrap">
           <div class="status dot-loader">読み込み中</div>
         </div>
       </div>
@@ -314,18 +396,27 @@
       <!-- スコアページ -->
       <div class="page" id="page-scores">
         <div class="page-title">SCORE LIST</div>
-        <div class="page-sub">取得済みスコアの一覧</div>
+        <div class="page-sub">ベストスコア一覧</div>
+        <div class="filter-bar" id="score-filter-bar"></div>
         <div class="score-list" id="score-list">
           <div class="status dot-loader">読み込み中</div>
         </div>
       </div>
+
     </div>
   </div>
 
 </div>
 
 <script>
-let currentUser = null;
+let currentUser       = null;
+let recommendData     = null;
+let allScores         = null;
+let statsData         = null;
+let activeRecommendTab = 'toHard';
+let activeScoreLamp   = 'ALL';
+
+const LAMP_ORDER = { FAILED: 0, ASSIST: 1, EASY: 2, CLEAR: 3, HARD: 4, EXHARD: 5, FC: 6 };
 
 // ── nav ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-item').forEach(el => {
@@ -342,86 +433,228 @@ document.getElementById('btn-login').addEventListener('click', async () => {
   const status = document.getElementById('auth-status');
   status.textContent = 'ブラウザを開いています…';
   const result = await window.tachi.startOAuth();
-  if (!result.success) {
-    status.textContent = 'エラー: ' + result.error;
-    return;
-  }
+  if (!result.success) { status.textContent = 'エラー: ' + result.error; return; }
   status.textContent = 'ユーザー情報を取得中…';
   try {
     const me = await window.tachi.getMe();
-    currentUser = me.user;
+    currentUser = me.user ?? me;
     document.getElementById('user-chip').textContent = currentUser.username;
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('main-screen').classList.add('active');
-    loadRecommend();
-    loadScores();
+    Promise.all([loadRecommend(), loadStats(), loadScores()]);
   } catch(e) {
     status.textContent = 'ユーザー情報の取得に失敗しました';
   }
 });
 
-// ── lamp badge ───────────────────────────────────────────────────────────────
-function lampBadge(lamp) {
-  const cls = lamp?.replace(' ', '') === 'FULLCOMBO' ? 'lamp-FC' :
-              lamp === 'HARD' ? 'lamp-CLEAR' :
-              lamp === 'CLEAR' ? 'lamp-CLEAR' :
-              lamp === 'EASY' ? 'lamp-EASY' : 'lamp-FAILED';
-  return `<span class="lamp-badge ${cls}">${lamp ?? '?'}</span>`;
+// ── lamp helpers ──────────────────────────────────────────────────────────────
+function lampCat(lamp) {
+  if (!lamp) return 'FAILED';
+  const l = lamp.toUpperCase();
+  if (l.includes('FULL COMBO')) return 'FC';
+  if (l.startsWith('EX HARD'))  return 'EXHARD';
+  if (l === 'HARD CLEAR' || l === 'HARD') return 'HARD';
+  if (l === 'CLEAR')            return 'CLEAR';
+  if (l === 'EASY CLEAR' || l === 'EASY') return 'EASY';
+  if (l.includes('ASSIST'))     return 'ASSIST';
+  return 'FAILED';
 }
 
-// ── recommend ─────────────────────────────────────────────────────────────────
-async function loadRecommend() {
-  const list = document.getElementById('recommend-list');
-  const stats = document.getElementById('recommend-stats');
-  try {
-    const scores = await window.tachi.getRecommend(currentUser.id);
-    stats.innerHTML = `
-      <div class="stat-card">
-        <div class="stat-label">候補曲数</div>
-        <div class="stat-value">${scores.length}</div>
-      </div>`;
+const LAMP_LABEL = { FC: 'FULL COMBO', EXHARD: 'EX HARD', HARD: 'HARD', CLEAR: 'CLEAR', EASY: 'EASY', ASSIST: 'ASSIST', FAILED: 'FAILED' };
 
-    if (scores.length === 0) {
-      list.innerHTML = '<div class="status">候補曲がありません。もっとプレイしてみましょう！</div>';
+function lampBadge(lamp) {
+  const cat = lampCat(lamp);
+  return `<span class="lamp-badge lamp-${cat}">${LAMP_LABEL[cat]}</span>`;
+}
+
+function getLevel(chart) {
+  return chart?.levelNum ?? (parseFloat(chart?.level) || 0);
+}
+
+function scoreItemHTML(s, rank) {
+  const lv    = getLevel(s.chart);
+  const diff  = s.chart?.difficulty ?? '';
+  const title = s.chart?.songTitle  || s.chartID;
+  const artist = s.chart?.artist   || '';
+  return `
+    <div class="score-item">
+      <div class="score-rank">${rank}</div>
+      <div>
+        <div class="score-title">${title}</div>
+        ${artist ? `<div class="score-artist">${artist}</div>` : ''}
+        <div class="score-meta">
+          <span class="lv-badge">☆${lv}</span>
+          ${diff ? '&nbsp;' + diff : ''}
+        </div>
+      </div>
+      <div class="score-right">${lampBadge(s.scoreData?.lamp)}</div>
+    </div>`;
+}
+
+// ── recommend ────────────────────────────────────────────────────────────────
+async function loadRecommend() {
+  const list    = document.getElementById('recommend-list');
+  const statsEl = document.getElementById('recommend-stats');
+  try {
+    recommendData = await window.tachi.getRecommend(currentUser.id ?? currentUser.username);
+    if (recommendData.noProfile) {
+      statsEl.innerHTML = '';
+      list.innerHTML = '<div class="status">Bokutachi に BMS 7K のプレイデータが見つかりません。スコアをインポートしてください。</div>';
       return;
     }
-
-    list.innerHTML = scores.map((s, i) => `
-      <div class="score-item">
-        <div class="score-rank">${i + 1}</div>
-        <div>
-          <div class="score-title">${s.chart?.songTitle ?? s.chartID}</div>
-          <div class="score-meta">Lv.${s.chart?.level ?? '?'} &nbsp;·&nbsp; ${s.chart?.difficulty ?? ''}</div>
-        </div>
-        ${lampBadge(s.scoreData?.lamp)}
-      </div>`).join('');
+    statsEl.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-label">HARD CLEAR 候補</div>
+        <div class="stat-value c-hard">${recommendData.toHard.length}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">CLEAR 候補</div>
+        <div class="stat-value c-clear">${recommendData.toClear.length}</div>
+      </div>`;
+    renderRecommendList();
   } catch(e) {
     list.innerHTML = `<div class="status">取得エラー: ${e.message}</div>`;
+  }
+}
+
+function renderRecommendList() {
+  if (!recommendData) return;
+  const list   = document.getElementById('recommend-list');
+  const scores = recommendData[activeRecommendTab] ?? [];
+  if (scores.length === 0) {
+    const msg = activeRecommendTab === 'toHard'
+      ? 'HARD CLEAR候補がありません。CLEAR数を増やしましょう！'
+      : 'CLEAR候補がありません。';
+    list.innerHTML = `<div class="status">${msg}</div>`;
+    return;
+  }
+  list.innerHTML = scores.map((s, i) => scoreItemHTML(s, i + 1)).join('');
+}
+
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    activeRecommendTab = btn.dataset.tab;
+    renderRecommendList();
+  });
+});
+
+// ── stats ─────────────────────────────────────────────────────────────────────
+async function loadStats() {
+  const wrap     = document.getElementById('stats-table-wrap');
+  const totalsEl = document.getElementById('stats-totals');
+  try {
+    statsData = await window.tachi.getStats(currentUser.id);
+    const { totals, byLevel, total } = statsData;
+
+    const hardPlus  = totals.HARD + totals.EXHARD + totals.FC;
+    const clearPlus = totals.CLEAR + hardPlus;
+
+    totalsEl.innerHTML = [
+      ['総譜面数',   total,             ''],
+      ['FC',         totals.FC + totals.EXHARD, 'c-fc'],
+      ['HARD以上',   hardPlus,          'c-hard'],
+      ['CLEAR以上',  clearPlus,         'c-clear'],
+      ['EASY以上',   clearPlus + totals.EASY, 'c-easy'],
+    ].map(([label, val, cls]) => `
+      <div class="stat-card">
+        <div class="stat-label">${label}</div>
+        <div class="stat-value ${cls}">${val}</div>
+      </div>`).join('');
+
+    const levels = Object.keys(byLevel)
+      .map(Number).filter(n => !isNaN(n) && n > 0)
+      .sort((a, b) => a - b);
+
+    if (levels.length === 0) { wrap.innerHTML = '<div class="status">データがありません</div>'; return; }
+
+    const COLS = ['FC', 'EXHARD', 'HARD', 'CLEAR', 'EASY', 'ASSIST', 'FAILED'];
+    const HEAD_LABEL = { FC: 'FC', EXHARD: 'EX HARD', HARD: 'HARD', CLEAR: 'CLEAR', EASY: 'EASY', ASSIST: 'ASSIST', FAILED: 'FAILED' };
+
+    const header = `<tr>
+      <th>Level</th>
+      ${COLS.map(c => `<th>${HEAD_LABEL[c]}</th>`).join('')}
+      <th>Total</th>
+    </tr>`;
+
+    const rows = levels.map(lv => {
+      const row = byLevel[lv] ?? {};
+      const rowTotal = COLS.reduce((s, c) => s + (row[c] ?? 0), 0);
+      return `<tr>
+        <td>☆${lv}</td>
+        ${COLS.map(c => {
+          const n = row[c] ?? 0;
+          return `<td class="${n > 0 ? 'cell-' + c.toLowerCase() : ''}">${n > 0 ? n : '–'}</td>`;
+        }).join('')}
+        <td>${rowTotal}</td>
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `<table class="stats-table"><thead>${header}</thead><tbody>${rows}</tbody></table>`;
+  } catch(e) {
+    wrap.innerHTML = `<div class="status">取得エラー: ${e.message}</div>`;
   }
 }
 
 // ── scores ────────────────────────────────────────────────────────────────────
 async function loadScores() {
-  const list = document.getElementById('score-list');
+  const list      = document.getElementById('score-list');
+  const filterBar = document.getElementById('score-filter-bar');
   try {
-    const data = await window.tachi.getScores(currentUser.id);
-    const scores = data.scores ?? [];
-    if (scores.length === 0) {
-      list.innerHTML = '<div class="status">スコアが見つかりませんでした</div>';
-      return;
+    const raw = await window.tachi.getScores(currentUser.id);
+
+    // best lamp per chart
+    const best = new Map();
+    for (const s of raw) {
+      if (!s.chartID) continue;
+      const prev  = best.get(s.chartID);
+      const curr  = LAMP_ORDER[lampCat(s.scoreData?.lamp)] ?? -1;
+      const prev_ = prev ? (LAMP_ORDER[lampCat(prev.scoreData?.lamp)] ?? -1) : -1;
+      if (!prev || curr > prev_) best.set(s.chartID, s);
     }
-    list.innerHTML = scores.slice(0, 50).map((s, i) => `
-      <div class="score-item">
-        <div class="score-rank">${i + 1}</div>
-        <div>
-          <div class="score-title">${s.chart?.songTitle ?? s.chartID}</div>
-          <div class="score-meta">Lv.${s.chart?.level ?? '?'}</div>
-        </div>
-        ${lampBadge(s.scoreData?.lamp)}
-      </div>`).join('');
+
+    allScores = [...best.values()].sort((a, b) => {
+      const la = LAMP_ORDER[lampCat(a.scoreData?.lamp)] ?? -1;
+      const lb = LAMP_ORDER[lampCat(b.scoreData?.lamp)] ?? -1;
+      return lb - la || getLevel(b.chart) - getLevel(a.chart);
+    });
+
+    const FILTERS = ['ALL', 'FC', 'EXHARD', 'HARD', 'CLEAR', 'EASY', 'ASSIST', 'FAILED'];
+    const FILTER_LABEL = { ALL: 'すべて', FC: 'FC', EXHARD: 'EX HARD', HARD: 'HARD', CLEAR: 'CLEAR', EASY: 'EASY', ASSIST: 'ASSIST', FAILED: 'FAILED' };
+
+    filterBar.innerHTML = FILTERS.map(f => `
+      <button class="filter-btn${f === 'ALL' ? ' active' : ''}" data-lamp="${f}">
+        ${FILTER_LABEL[f]}
+      </button>`).join('');
+
+    filterBar.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeScoreLamp = btn.dataset.lamp;
+        renderScoreList();
+      });
+    });
+
+    renderScoreList();
   } catch(e) {
     list.innerHTML = `<div class="status">取得エラー: ${e.message}</div>`;
   }
+}
+
+function renderScoreList() {
+  if (!allScores) return;
+  const list     = document.getElementById('score-list');
+  const filtered = activeScoreLamp === 'ALL'
+    ? allScores
+    : allScores.filter(s => lampCat(s.scoreData?.lamp) === activeScoreLamp);
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="status">該当するスコアがありません</div>';
+    return;
+  }
+  list.innerHTML = filtered.slice(0, 100).map((s, i) => scoreItemHTML(s, i + 1)).join('');
 }
 </script>
 </body>

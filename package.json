@@ -12,5 +12,8 @@
   "dependencies": {
     "axios": "^1.9.0",
     "dotenv": "^16.5.0"
+  },
+  "allowScripts": {
+    "electron@36.9.5": true
   }
 }

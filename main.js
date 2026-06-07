@@ -1,4 +1,6 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+console.log('CLIENT_ID:', process.env.CLIENT_ID);
+console.log('CLIENT_SECRET:', process.env.CLIENT_SECRET ? '***loaded***' : 'UNDEFINED');
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const http = require('http');
 const path = require('path');
@@ -12,6 +14,57 @@ const TACHI_BASE = 'https://boku.tachi.ac/api/v1';
 let mainWindow;
 let accessToken = null;
 let callbackServer = null;
+
+// ─── Lamp helpers ─────────────────────────────────────────────────────────────
+
+const LAMP_ORDER = { FAILED: 0, ASSIST: 1, EASY: 2, CLEAR: 3, HARD: 4, EXHARD: 5, FC: 6 };
+
+function lampCat(lamp) {
+  if (!lamp) return 'FAILED';
+  const l = lamp.toUpperCase();
+  if (l.includes('FULL COMBO')) return 'FC';
+  if (l.startsWith('EX HARD')) return 'EXHARD';
+  if (l === 'HARD CLEAR' || l === 'HARD') return 'HARD';
+  if (l === 'CLEAR') return 'CLEAR';
+  if (l === 'EASY CLEAR' || l === 'EASY') return 'EASY';
+  if (l.includes('ASSIST')) return 'ASSIST';
+  return 'FAILED';
+}
+
+// ─── Data helpers ─────────────────────────────────────────────────────────────
+
+// Join scores array with separate charts/songs arrays returned by the API
+function joinScores(data) {
+  const scores = data.scores ?? [];
+  const chartMap = new Map((data.charts ?? []).map(c => [c.chartID, c]));
+
+  return scores.map(s => {
+    const chart = chartMap.get(s.chartID) ?? {};
+    return {
+      ...s,
+      chart: { ...chart, songTitle: chart.song?.title ?? s.chartID, artist: chart.song?.artist ?? '' },
+    };
+  });
+}
+
+// Deduplicate to one entry per chart, keeping the best lamp
+function bestPerChart(scores) {
+  const best = new Map();
+  for (const s of scores) {
+    if (!s.chartID) continue;
+    const prev = best.get(s.chartID);
+    const curr = LAMP_ORDER[lampCat(s.scoreData?.lamp)] ?? -1;
+    const prev_ = prev ? (LAMP_ORDER[lampCat(prev.scoreData?.lamp)] ?? -1) : -1;
+    if (!prev || curr > prev_) best.set(s.chartID, s);
+  }
+  return [...best.values()];
+}
+
+function getLevel(chart) {
+  return chart?.levelNum ?? (parseFloat(chart?.level) || 0);
+}
+
+// ─── Window ───────────────────────────────────────────────────────────────────
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -27,51 +80,30 @@ function createWindow() {
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#0f0f14',
   });
-
   mainWindow.loadFile('index.html');
 }
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
-// ─── OAuth ───────────────────────────────────────────────────────────────────
-
-function startCallbackServer() {
-  return new Promise((resolve, reject) => {
-    callbackServer = http.createServer((req, res) => {
-      const url = new URL(req.url, 'http://localhost:8080');
-      if (url.pathname !== '/callback') return;
-
-      const code = url.searchParams.get('code');
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end('<html><body style="background:#0f0f14;color:#e0e0e0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><p>認証完了しました。このタブを閉じてください。</p></body></html>');
-      callbackServer.close();
-      resolve(code);
-    });
-
-    callbackServer.listen(8080, () => resolve(null));
-    callbackServer.on('error', reject);
-  });
-}
+// ─── OAuth ────────────────────────────────────────────────────────────────────
 
 ipcMain.handle('oauth-start', async () => {
   const serverReady = new Promise((resolve, reject) => {
     callbackServer = http.createServer((req, res) => {
       const url = new URL(req.url, 'http://localhost:8080');
       if (url.pathname !== '/callback') { res.end(); return; }
-
       const code = url.searchParams.get('code');
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end('<html><body style="background:#0f0f14;color:#c8c8d0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><p>認証完了。このタブを閉じてください。</p></body></html>');
       callbackServer.close();
       resolve(code);
     });
-    callbackServer.listen(8080, () => {});
+    callbackServer.listen(8080, () => { });
     callbackServer.on('error', reject);
   });
 
-  const oauthUrl = `https://boku.tachi.ac/oauth/request-auth?clientID=${CLIENT_ID}`;
-  shell.openExternal(oauthUrl);
+  shell.openExternal(`https://boku.tachi.ac/oauth/request-auth?clientID=${CLIENT_ID}`);
 
   const code = await serverReady;
   if (!code) return { success: false, error: 'No code received' };
@@ -82,57 +114,117 @@ ipcMain.handle('oauth-start', async () => {
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       redirect_uri: REDIRECT_URI,
+      grant_type: 'authorization_code',
+    }, {
+      headers: { 'Content-Type': 'application/json' },
     });
     accessToken = res.data.body.token;
     return { success: true };
   } catch (e) {
-    return { success: false, error: e.message };
+    const detail = e.response?.data ?? e.message;
+    console.error('TOKEN ERROR:', JSON.stringify(detail, null, 2));
+    return { success: false, error: JSON.stringify(detail) };
   }
 });
 
-// ─── API ──────────────────────────────────────────────────────────────────────
+// ─── API util ─────────────────────────────────────────────────────────────────
 
 async function tachiGet(path) {
-  const res = await axios.get(`${TACHI_BASE}${path}`, {
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-  });
-  return res.data.body;
+  console.log('tachiGet:', path, '/ token:', accessToken ? '***set***' : 'NOT SET');
+  try {
+    const res = await axios.get(`${TACHI_BASE}${path}`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    });
+    console.log('tachiGet response:', JSON.stringify(res.data).slice(0, 200));
+    return res.data.body;
+  } catch (e) {
+    const detail = e.response?.data ?? e.message;
+    console.error('tachiGet ERROR:', JSON.stringify(detail, null, 2));
+    throw e;
+  }
 }
 
+// ─── IPC handlers ─────────────────────────────────────────────────────────────
+
 ipcMain.handle('get-me', async () => {
-  return await tachiGet('/users/me');
+  try {
+    return await tachiGet('/users/me');
+  } catch (e) {
+    const detail = e.response?.data ?? e.message;
+    console.error('GET-ME ERROR:', JSON.stringify(detail, null, 2));
+    throw e;
+  }
 });
 
+// Returns flat joined array (one entry per score, chart+song data embedded)
 ipcMain.handle('get-scores', async (_e, userID) => {
-  return await tachiGet(`/users/${userID}/games/bms/7K/scores`);
+  let data;
+  try {
+    data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`);
+  } catch (e) {
+    if (e.response?.status === 404) return [];
+    throw e;
+  }
+  const chartMap = new Map((data.charts ?? []).map(c => [c.chartID, c]));
+  return (data.pbs ?? []).map(pb => {
+    const chart = chartMap.get(pb.chartID) ?? {};
+    return { ...pb, chart: { ...chart, songTitle: chart.song?.title ?? '', artist: chart.song?.artist ?? '' } };
+  });
 });
 
+// Returns { toHard: [...], toClear: [...] } — best lamp per chart, sorted by level
 ipcMain.handle('get-recommend', async (_e, userID) => {
-  // スコア一覧を取得してレコメンドロジックを適用
-  const data = await tachiGet(`/users/${userID}/games/bms/7K/scores`);
-  const scores = data.scores ?? [];
+  console.log('get-recommend userID:', userID);
+  let data;
+  try {
+    data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`);
+  } catch (e) {
+    if (e.response?.status === 404) return { toHard: [], toClear: [], noProfile: true };
+    throw e;
+  }
+  const chartMap = new Map((data.charts ?? []).map(c => [c.chartID, c]));
+  const pbs = (data.pbs ?? []).map(pb => {
+    const chart = chartMap.get(pb.chartID) ?? {};
+    return { ...pb, chart: { ...chart, songTitle: chart.song?.title ?? '', artist: chart.song?.artist ?? '' } };
+  });
 
-  // lamp でグループ化
-  const lampOrder = { FAILED: 0, EASY: 1, CLEAR: 2, HARD: 3, 'FULL COMBO': 4 };
+  const best = bestPerChart(pbs);
+  const toHard = best
+    .filter(s => (LAMP_ORDER[lampCat(s.scoreData?.lamp)] ?? -1) < LAMP_ORDER.HARD)
+    .sort((a, b) => getLevel(a.chart) - getLevel(b.chart));
+  const toClear = best
+    .filter(s => (LAMP_ORDER[lampCat(s.scoreData?.lamp)] ?? -1) < LAMP_ORDER.CLEAR)
+    .sort((a, b) => getLevel(a.chart) - getLevel(b.chart));
 
-  // CLEAR済みでHARD CLEAR未達の曲を抽出、難易度でソート
-  const cleared = new Map();
-  const hardCleared = new Set();
+  return { toHard, toClear };
+});
 
-  for (const s of scores) {
-    const lamp = s.scoreData?.lamp;
-    const chartID = s.chartID;
-    if (!chartID) continue;
-    if (lamp === 'HARD' || lamp === 'FULL COMBO') hardCleared.add(chartID);
-    if ((lampOrder[lamp] ?? -1) >= lampOrder['CLEAR']) {
-      if (!cleared.has(chartID)) cleared.set(chartID, s);
-    }
+// Returns { byLevel: { [lv]: { FC, EXHARD, HARD, CLEAR, EASY, ASSIST, FAILED } }, totals, total }
+ipcMain.handle('get-stats', async (_e, userID) => {
+  let data;
+  try {
+    data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`);
+  } catch (e) {
+    if (e.response?.status === 404) return { byLevel: {}, totals: { FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 }, total: 0 };
+    throw e;
+  }
+  const chartMap = new Map((data.charts ?? []).map(c => [c.chartID, c]));
+  const pbs = (data.pbs ?? []).map(pb => {
+    const chart = chartMap.get(pb.chartID) ?? {};
+    return { ...pb, chart: { ...chart, songTitle: chart.song?.title ?? '', artist: chart.song?.artist ?? '' } };
+  });
+
+  const empty = () => ({ FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 });
+  const byLevel = {};
+  const totals = empty();
+
+  for (const s of pbs) {
+    const cat = lampCat(s.scoreData?.lamp);
+    const lv = getLevel(s.chart);
+    if (!byLevel[lv]) byLevel[lv] = empty();
+    byLevel[lv][cat]++;
+    totals[cat]++;
   }
 
-  const candidates = [...cleared.entries()]
-    .filter(([id]) => !hardCleared.has(id))
-    .map(([, s]) => s)
-    .sort((a, b) => (a.chart?.level ?? 0) - (b.chart?.level ?? 0));
-
-  return candidates.slice(0, 30);
+  return { byLevel, totals, total: pbs.length };
 });

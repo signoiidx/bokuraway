@@ -1,10 +1,14 @@
 # bokuraway
 
+- *bokura*: Japanese paraphrase of *boku-tachi*, meaning "us".
+- *stairway*: the web tool for LR2IR.
+- *bokuraway*: the desktop tool for Bokutachi IR.
+
 Bokutachi IRユーザのための練習サポートデスクトップアプリ。[Bokutachi](https://boku.tachi.ac) のスコアデータをもとに、次に狙うべき譜面をレコメンドします。
 
 ## 機能
 
-- 試験的に追加した機能のため、今後人手で機能を検討し、変更予定あり。
+- 生成AIのパワーで試験的に追加した機能のため、今後人手で機能を検討し、変更予定あり。
 
   - **レコメンド** — CLEAR済みでHARD CLEARがまだの譜面、およびまだCLEARできていない譜面を難易度順に一覧表示
   - **スコア一覧** — 全7K PBをランプ別にフィルタリングして表示
@@ -16,7 +20,7 @@ Bokutachi IRユーザのための練習サポートデスクトップアプリ�
 
 - [Node.js](https://nodejs.org/)
 - Bokutachi アカウント
-- Bokutachi の OAuth クライアント情報（[Bokutachi 管理画面](https://boku.tachi.ac/dashboard/developer)で取得）
+- Bokutachi の OAuth クライアント情報（My Integrations - Service Integrations - My API Clientsで取得）
 
 ### インストール
 
@@ -32,7 +36,7 @@ npm install
 cp .env.example .env
 ```
 
-`.env` を開き、Bokutachi 管理画面で取得した `CLIENT_ID` と `CLIENT_SECRET` を記入します。
+`.env` を開き、Bokutachi Integrations My API Clientsで取得した `CLIENT_ID` と `CLIENT_SECRET` を記入します。
 
 ```env
 CLIENT_ID=CIxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -59,4 +63,4 @@ npm start
 
 ## ライセンス
 
-MIT License
+The MIT License

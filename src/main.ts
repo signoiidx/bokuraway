@@ -1,55 +1,83 @@
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+import 'dotenv/config';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import http from 'http';
+import path from 'path';
+import axios, { AxiosError } from 'axios';
+
 console.log('CLIENT_ID:', process.env.CLIENT_ID);
 console.log('CLIENT_SECRET:', process.env.CLIENT_SECRET ? '***loaded***' : 'UNDEFINED');
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
-const http = require('http');
-const path = require('path');
-const axios = require('axios');
 
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const REDIRECT_URI = 'http://localhost:8080/callback';
 const TACHI_BASE = 'https://boku.tachi.ac/api/v1';
 
-let mainWindow;
-let accessToken = null;
-let callbackServer = null;
+let mainWindow: BrowserWindow | null = null;
+let accessToken: string | null = null;
+let callbackServer: http.Server | null = null;
 
 // ─── Lamp helpers ─────────────────────────────────────────────────────────────
 
-const LAMP_ORDER = { FAILED: 0, ASSIST: 1, EASY: 2, CLEAR: 3, HARD: 4, EXHARD: 5, FC: 6 };
+type LampCat = 'FAILED' | 'ASSIST' | 'EASY' | 'CLEAR' | 'HARD' | 'EXHARD' | 'FC';
 
-function lampCat(lamp) {
+const LAMP_ORDER: Record<LampCat, number> = {
+  FAILED: 0, ASSIST: 1, EASY: 2, CLEAR: 3, HARD: 4, EXHARD: 5, FC: 6,
+};
+
+function lampCat(lamp: string | undefined | null): LampCat {
   if (!lamp) return 'FAILED';
   const l = lamp.toUpperCase();
   if (l.includes('FULL COMBO')) return 'FC';
-  if (l.startsWith('EX HARD')) return 'EXHARD';
+  if (l.startsWith('EX HARD'))  return 'EXHARD';
   if (l === 'HARD CLEAR' || l === 'HARD') return 'HARD';
-  if (l === 'CLEAR') return 'CLEAR';
+  if (l === 'CLEAR')            return 'CLEAR';
   if (l === 'EASY CLEAR' || l === 'EASY') return 'EASY';
-  if (l.includes('ASSIST')) return 'ASSIST';
+  if (l.includes('ASSIST'))     return 'ASSIST';
   return 'FAILED';
 }
 
 // ─── Data helpers ─────────────────────────────────────────────────────────────
 
-// Join scores array with separate charts/songs arrays returned by the API
-function joinScores(data) {
-  const scores = data.scores ?? [];
-  const chartMap = new Map((data.charts ?? []).map(c => [c.chartID, c]));
+interface TachiSong {
+  id: string;
+  title: string;
+  artist: string;
+}
 
-  return scores.map(s => {
-    const chart = chartMap.get(s.chartID) ?? {};
-    return {
-      ...s,
-      chart: { ...chart, songTitle: chart.song?.title ?? s.chartID, artist: chart.song?.artist ?? '' },
-    };
+interface TachiChart {
+  chartID: string;
+  level: string;
+  levelNum: number;
+  difficulty: string;
+  song?: TachiSong;
+}
+
+interface TachiScoreData {
+  lamp?: string;
+}
+
+interface TachiPB {
+  chartID: string;
+  scoreData?: TachiScoreData;
+  chart?: TachiChart & { songTitle: string; artist: string };
+}
+
+interface TachiPBsResponse {
+  pbs?: TachiPB[];
+  charts?: TachiChart[];
+  songs?: TachiSong[];
+}
+
+function joinedPBs(data: TachiPBsResponse): TachiPB[] {
+  const chartMap = new Map((data.charts ?? []).map(c => [c.chartID, c]));
+  return (data.pbs ?? []).map(pb => {
+    const chart = chartMap.get(pb.chartID) ?? {} as TachiChart;
+    return { ...pb, chart: { ...chart, songTitle: chart.song?.title ?? '', artist: chart.song?.artist ?? '' } };
   });
 }
 
-// Deduplicate to one entry per chart, keeping the best lamp
-function bestPerChart(scores) {
-  const best = new Map();
+function bestPerChart(scores: TachiPB[]): TachiPB[] {
+  const best = new Map<string, TachiPB>();
   for (const s of scores) {
     if (!s.chartID) continue;
     const prev = best.get(s.chartID);
@@ -60,13 +88,13 @@ function bestPerChart(scores) {
   return [...best.values()];
 }
 
-function getLevel(chart) {
-  return chart?.levelNum ?? (parseFloat(chart?.level) || 0);
+function getLevel(chart: TachiPB['chart']): number {
+  return chart?.levelNum ?? (parseFloat(chart?.level ?? '') || 0);
 }
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 
-function createWindow() {
+function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 750,
@@ -80,7 +108,7 @@ function createWindow() {
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#0f0f14',
   });
-  mainWindow.loadFile('index.html');
+  mainWindow.loadFile(path.join(__dirname, '../index.html'));
 }
 
 app.whenReady().then(createWindow);
@@ -89,18 +117,18 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 // ─── OAuth ────────────────────────────────────────────────────────────────────
 
 ipcMain.handle('oauth-start', async () => {
-  const serverReady = new Promise((resolve, reject) => {
+  const serverReady = new Promise<string | null>((resolve, reject) => {
     callbackServer = http.createServer((req, res) => {
-      const url = new URL(req.url, 'http://localhost:8080');
+      const url = new URL(req.url!, 'http://localhost:8080');
       if (url.pathname !== '/callback') { res.end(); return; }
       const code = url.searchParams.get('code');
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end('<html><body style="background:#0f0f14;color:#c8c8d0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><p>認証完了。このタブを閉じてください。</p></body></html>');
-      callbackServer.close();
+      callbackServer!.close();
       resolve(code);
     });
-    callbackServer.listen(8080, () => { });
-    callbackServer.on('error', reject);
+    callbackServer!.listen(8080, () => { });
+    callbackServer!.on('error', reject);
   });
 
   shell.openExternal(`https://boku.tachi.ac/oauth/request-auth?clientID=${CLIENT_ID}`);
@@ -121,7 +149,8 @@ ipcMain.handle('oauth-start', async () => {
     accessToken = res.data.body.token;
     return { success: true };
   } catch (e) {
-    const detail = e.response?.data ?? e.message;
+    const err = e as AxiosError;
+    const detail = err.response?.data ?? err.message;
     console.error('TOKEN ERROR:', JSON.stringify(detail, null, 2));
     return { success: false, error: JSON.stringify(detail) };
   }
@@ -129,16 +158,17 @@ ipcMain.handle('oauth-start', async () => {
 
 // ─── API util ─────────────────────────────────────────────────────────────────
 
-async function tachiGet(path) {
-  console.log('tachiGet:', path, '/ token:', accessToken ? '***set***' : 'NOT SET');
+async function tachiGet(apiPath: string): Promise<unknown> {
+  console.log('tachiGet:', apiPath, '/ token:', accessToken ? '***set***' : 'NOT SET');
   try {
-    const res = await axios.get(`${TACHI_BASE}${path}`, {
+    const res = await axios.get(`${TACHI_BASE}${apiPath}`, {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
     });
     console.log('tachiGet response:', JSON.stringify(res.data).slice(0, 200));
     return res.data.body;
   } catch (e) {
-    const detail = e.response?.data ?? e.message;
+    const err = e as AxiosError;
+    const detail = err.response?.data ?? err.message;
     console.error('tachiGet ERROR:', JSON.stringify(detail, null, 2));
     throw e;
   }
@@ -150,45 +180,37 @@ ipcMain.handle('get-me', async () => {
   try {
     return await tachiGet('/users/me');
   } catch (e) {
-    const detail = e.response?.data ?? e.message;
+    const err = e as AxiosError;
+    const detail = err.response?.data ?? err.message;
     console.error('GET-ME ERROR:', JSON.stringify(detail, null, 2));
     throw e;
   }
 });
 
 // Returns flat joined array (one entry per score, chart+song data embedded)
-ipcMain.handle('get-scores', async (_e, userID) => {
-  let data;
+ipcMain.handle('get-scores', async (_e, userID: number) => {
+  let data: TachiPBsResponse;
   try {
-    data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`);
+    data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`) as TachiPBsResponse;
   } catch (e) {
-    if (e.response?.status === 404) return [];
+    if ((e as AxiosError).response?.status === 404) return [];
     throw e;
   }
-  const chartMap = new Map((data.charts ?? []).map(c => [c.chartID, c]));
-  return (data.pbs ?? []).map(pb => {
-    const chart = chartMap.get(pb.chartID) ?? {};
-    return { ...pb, chart: { ...chart, songTitle: chart.song?.title ?? '', artist: chart.song?.artist ?? '' } };
-  });
+  return joinedPBs(data);
 });
 
 // Returns { toHard: [...], toClear: [...] } — best lamp per chart, sorted by level
-ipcMain.handle('get-recommend', async (_e, userID) => {
+ipcMain.handle('get-recommend', async (_e, userID: number) => {
   console.log('get-recommend userID:', userID);
-  let data;
+  let data: TachiPBsResponse;
   try {
-    data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`);
+    data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`) as TachiPBsResponse;
   } catch (e) {
-    if (e.response?.status === 404) return { toHard: [], toClear: [], noProfile: true };
+    if ((e as AxiosError).response?.status === 404) return { toHard: [], toClear: [], noProfile: true };
     throw e;
   }
-  const chartMap = new Map((data.charts ?? []).map(c => [c.chartID, c]));
-  const pbs = (data.pbs ?? []).map(pb => {
-    const chart = chartMap.get(pb.chartID) ?? {};
-    return { ...pb, chart: { ...chart, songTitle: chart.song?.title ?? '', artist: chart.song?.artist ?? '' } };
-  });
 
-  const best = bestPerChart(pbs);
+  const best = bestPerChart(joinedPBs(data));
   const toHard = best
     .filter(s => (LAMP_ORDER[lampCat(s.scoreData?.lamp)] ?? -1) < LAMP_ORDER.HARD)
     .sort((a, b) => getLevel(a.chart) - getLevel(b.chart));
@@ -200,25 +222,22 @@ ipcMain.handle('get-recommend', async (_e, userID) => {
 });
 
 // Returns { byLevel: { [lv]: { FC, EXHARD, HARD, CLEAR, EASY, ASSIST, FAILED } }, totals, total }
-ipcMain.handle('get-stats', async (_e, userID) => {
-  let data;
+ipcMain.handle('get-stats', async (_e, userID: number) => {
+  let data: TachiPBsResponse;
   try {
-    data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`);
+    data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`) as TachiPBsResponse;
   } catch (e) {
-    if (e.response?.status === 404) return { byLevel: {}, totals: { FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 }, total: 0 };
+    if ((e as AxiosError).response?.status === 404) {
+      return { byLevel: {}, totals: { FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 }, total: 0 };
+    }
     throw e;
   }
-  const chartMap = new Map((data.charts ?? []).map(c => [c.chartID, c]));
-  const pbs = (data.pbs ?? []).map(pb => {
-    const chart = chartMap.get(pb.chartID) ?? {};
-    return { ...pb, chart: { ...chart, songTitle: chart.song?.title ?? '', artist: chart.song?.artist ?? '' } };
-  });
 
-  const empty = () => ({ FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 });
-  const byLevel = {};
+  const empty = (): Record<LampCat, number> => ({ FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 });
+  const byLevel: Record<number, Record<LampCat, number>> = {};
   const totals = empty();
 
-  for (const s of pbs) {
+  for (const s of joinedPBs(data)) {
     const cat = lampCat(s.scoreData?.lamp);
     const lv = getLevel(s.chart);
     if (!byLevel[lv]) byLevel[lv] = empty();
@@ -226,5 +245,5 @@ ipcMain.handle('get-stats', async (_e, userID) => {
     totals[cat]++;
   }
 
-  return { byLevel, totals, total: pbs.length };
+  return { byLevel, totals, total: (data.pbs ?? []).length };
 });

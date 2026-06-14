@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "npm run build && electron .",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "npm run build && node tests/e2e.mjs"
   },
   "devDependencies": {
     "@types/node": "^25.9.2",

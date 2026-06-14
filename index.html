@@ -523,8 +523,20 @@ function getLevel(chart) {
   return chart?.levelNum ?? (parseFloat(chart?.level) || 0);
 }
 
+// 譜面が合致する全テーブルの難易度表記を返す。どこにも載っていなければ "-"
+function getTableLabels(s) {
+  const md5 = (s.chart?.data?.hashMD5 || '').toLowerCase();
+  if (!md5) return '-';
+  const entries = tableIndex.get(md5);
+  return entries && entries.length > 0 ? entries.map(e => e.level).join(' / ') : '-';
+}
+
 function scoreItemHTML(s, rank, lvLabel) {
-  const lv    = lvLabel ?? s.chart?.data?.aiLevel ?? ('☆' + getLevel(s.chart));
+  const lv = lvLabel !== undefined
+    ? lvLabel
+    : tableDataLoaded
+      ? getTableLabels(s)
+      : (s.chart?.data?.aiLevel ?? ('☆' + getLevel(s.chart)));
   const title = s.chart?.songTitle || s.chartID;
   const artist = s.chart?.artist  || '';
   return `
@@ -710,7 +722,7 @@ function renderScoreList() {
 
 // ── difficulty tables ─────────────────────────────────────────────────────────
 let activeTableTab = 'insane';
-// md5 (= chartID) → { table, level, levelNum }
+// md5 → DiffTableEntry[]  (1曲が複数テーブルに載ることがあるため配列)
 let tableIndex = new Map();
 let tableDataLoaded = false;
 
@@ -721,10 +733,13 @@ async function loadTableData() {
     tableIndex = new Map();
     for (const entries of Object.values(data)) {
       for (const entry of entries) {
-        if (entry.md5) tableIndex.set(entry.md5.toLowerCase(), entry);
+        if (!entry.md5) continue;
+        const key = entry.md5.toLowerCase();
+        if (!tableIndex.has(key)) tableIndex.set(key, []);
+        tableIndex.get(key).push(entry);
       }
     }
-    console.log('Table index:', tableIndex.size, 'entries');
+    console.log('Table index:', tableIndex.size, 'charts');
     tableDataLoaded = true;
     renderTableView();
   } catch(e) {
@@ -743,12 +758,12 @@ function renderTableView() {
   }
 
   // Match scores against the table index using hashMD5 from chart.data
-  const mapped = allScores.map(s => ({
-    s,
-    entry: tableIndex.get((s.chart?.data?.hashMD5 || '').toLowerCase()),
-  }));
-  const tableScores  = mapped.filter(({ entry }) => entry?.table === activeTableTab);
-  const unmatchedScores = mapped.filter(({ entry }) => !entry || entry.table !== activeTableTab);
+  const mapped = allScores.map(s => {
+    const allEntries = tableIndex.get((s.chart?.data?.hashMD5 || '').toLowerCase()) ?? [];
+    return { s, entry: allEntries.find(e => e.table === activeTableTab) ?? null };
+  });
+  const tableScores     = mapped.filter(({ entry }) => entry !== null);
+  const unmatchedScores = mapped.filter(({ entry }) => entry === null);
 
   const counts = { FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 };
   for (const { s } of tableScores) counts[lampCat(s.scoreData?.lamp)]++;

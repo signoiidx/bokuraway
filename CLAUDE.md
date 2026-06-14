@@ -14,15 +14,37 @@ npm install
 npm start
 ```
 
-No build step — Electron loads files directly.
+TypeScript source is compiled to `dist/` before launch (`tsc`). `npm start` runs the build automatically.
+
+## Testing
+
+```
+npm test   # tsc build → node tests/e2e.mjs (Playwright + node:test, 18 tests)
+```
+
+Screenshots are written to `tests/shots/` (gitignored) on each run.
 
 ## Architecture
 
 The app follows Electron's standard main/renderer split with context isolation:
 
-- **`main.js`** — Main process. Creates the `BrowserWindow`, runs an OAuth callback server on `http://localhost:8080/callback`, and exposes five IPC handlers: `oauth-start`, `get-me`, `get-scores`, `get-recommend`, `get-stats`. All Bokutachi API calls go through `tachiGet()` here using the stored `accessToken`.
-- **`preload.js`** — Context bridge. Exposes `window.tachi` to the renderer with five methods: `startOAuth`, `getMe`, `getScores`, `getRecommend`, `getStats`. `nodeIntegration` is disabled; this is the only way renderer code talks to the main process.
-- **`index.html`** — Single-file renderer (HTML + CSS + JS). Handles the auth screen, sidebar navigation, and three pages: "レコメンド" (Recommend), "スコア一覧" (Score List), and "統計" (Stats). No framework or bundler.
+- **`src/main.ts`** — Main process. Creates the `BrowserWindow`, runs an OAuth callback server on `http://localhost:8080/callback`, and exposes six IPC handlers: `oauth-start`, `get-me`, `get-scores`, `get-recommend`, `get-stats`, `get-table-data`. All Bokutachi API calls go through `tachiGet()` using the stored `accessToken`. Difficulty table data is fetched from external JSON endpoints via `fetchBmsTable()`.
+- **`src/preload.ts`** — Context bridge. Exposes `window.tachi` to the renderer with six methods: `startOAuth`, `getMe`, `getScores`, `getRecommend`, `getStats`, `getTableData`. `nodeIntegration` is disabled.
+- **`index.html`** — Single-file renderer (HTML + CSS + JS). Handles the auth screen, sidebar navigation, and four pages: "レコメンド" (Recommend), "スコア一覧" (Score List), "統計" (Stats), "難易度表" (Difficulty Tables). No framework or bundler.
+
+### Test interface
+
+`index.html` exposes `window.__test` at the bottom of its `<script>` block for use by `tests/e2e.mjs`. It is never called during normal app flow:
+
+```js
+window.__test = {
+  setScores(data),          // sets allScores
+  setTableData(entries),    // builds tableIndex (Map<md5, entry[]>) and sets tableDataLoaded = true
+  setActiveTableTab(tab),   // sets activeTableTab
+  renderTableView(),
+  renderScoreList(),
+}
+```
 
 ## Bokutachi API
 
@@ -38,6 +60,7 @@ Credentials (`CLIENT_ID`, `CLIENT_SECRET`) are read from `.env` via `dotenv`.
 - **ChartDocument schema:** The song is embedded directly inside each `ChartDocument` as `chart.song` (fields: `title`, `artist`, `id`, etc.). There is no separate `chart.songID` join key — use `chart.song.title` / `chart.song.artist` directly.
 - **BMS difficulty:** BMS 7K has only one difficulty value: `"CHART"`. This is correct and intentional — each BMS file is its own standalone chart.
 - **BMS level:** Charts not listed in any difficulty table have `levelNum: 0`. Charts with table entries (insane, satellite, etc.) carry their actual level.
+- **Chart extra data:** `chart.data.hashMD5` is used to match scores against difficulty table entries. `chart.data.aiLevel` carries the AI-estimated level string. `scoreData.optional.bp` holds the Bad Point count.
 
 ## Recommend logic
 
@@ -48,3 +71,32 @@ Credentials (`CLIENT_ID`, `CLIENT_SECRET`) are read from `.env` via `dotenv`.
 3. Returns `{ toHard, toClear }`:
    - `toHard` — charts CLEARed or EASY CLEARed but not yet HARD CLEARed, sorted ascending by level.
    - `toClear` — charts below CLEAR (EASY, ASSIST, FAILED), sorted ascending by level.
+
+## Difficulty table logic
+
+`get-table-data` IPC handler fetches four external BMS difficulty tables at login time:
+
+| ID | Symbol | Source |
+|---|---|---|
+| `insane` | ★ | miraiscarlet.github.io/bms/table/genocide_insane |
+| `satellite` | sl | stellabms.xyz/sl |
+| `stella` | st | stellabms.xyz/st |
+| `overjoy` | ★★ | lr2.sakura.ne.jp/data |
+
+Each table's `header.json` is fetched → resolves `data_url` → downloads the chart list → entries are indexed by MD5 (`DiffTableEntry[]`).
+
+In the renderer, `tableIndex` is `Map<md5, DiffTableEntry[]>` (a chart can appear in multiple tables). `getTableLabels(s)` returns all matching level strings joined with ` / ` (e.g. `★11 / sl7`), or `"-"` if the chart is in no table.
+
+The difficulty table view groups scores by level, shows played charts with their lamp and BP, and renders unplayed table entries as dimmed NO PLAY rows. A thin progress bar in each level header shows the HARD+ rate.
+
+## Lamp colors
+
+| Lamp | Color |
+|---|---|
+| FULL COMBO | rainbow gradient |
+| EX HARD | yellow |
+| HARD | white |
+| CLEAR | blue |
+| EASY | green |
+| ASSIST EASY | purple |
+| FAILED | red |

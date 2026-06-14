@@ -322,6 +322,28 @@
   .cell-assist { color: var(--c-assist) !important; }
   .cell-failed { color: var(--c-failed) !important; }
 
+  /* ── level section ── */
+  .level-section { margin-bottom: 24px; }
+  .level-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 2px;
+    padding: 6px 0;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .level-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0;
+  }
+
   /* ── status / loader ── */
   .status { font-size: 13px; color: var(--muted); padding: 40px 0; text-align: center; }
   .dot-loader::after {
@@ -365,6 +387,9 @@
       <div class="nav-item" data-page="scores">
         <span class="nav-icon">📊</span> スコア一覧
       </div>
+      <div class="nav-item" data-page="tables">
+        <span class="nav-icon">📋</span> 難易度表
+      </div>
     </nav>
 
     <div id="content">
@@ -389,6 +414,22 @@
         <div class="page-sub">難易度別クリアランプ分布</div>
         <div id="stats-totals" class="stat-grid"></div>
         <div id="stats-table-wrap">
+          <div class="status dot-loader">読み込み中</div>
+        </div>
+      </div>
+
+      <!-- 難易度表ページ -->
+      <div class="page" id="page-tables">
+        <div class="page-title">DIFFICULTY TABLES</div>
+        <div class="page-sub">難易度表別スコア一覧（プレイ済みのみ）</div>
+        <div class="tab-bar" id="table-tab-bar">
+          <button class="tab active" data-table="insane">発狂難易度</button>
+          <button class="tab" data-table="satellite">Satellite</button>
+          <button class="tab" data-table="stella">Stella</button>
+          <button class="tab" data-table="overjoy">Overjoy</button>
+        </div>
+        <div id="table-stats" class="stat-grid"></div>
+        <div class="score-list" id="table-list">
           <div class="status dot-loader">読み込み中</div>
         </div>
       </div>
@@ -425,6 +466,7 @@ document.querySelectorAll('.nav-item').forEach(el => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     el.classList.add('active');
     document.getElementById('page-' + el.dataset.page).classList.add('active');
+    if (el.dataset.page === 'tables') renderTableView();
   });
 });
 
@@ -442,6 +484,7 @@ document.getElementById('btn-login').addEventListener('click', async () => {
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('main-screen').classList.add('active');
     Promise.all([loadRecommend(), loadStats(), loadScores()]);
+    loadTableData();
   } catch(e) {
     status.textContent = 'ユーザー情報の取得に失敗しました';
   }
@@ -471,11 +514,10 @@ function getLevel(chart) {
   return chart?.levelNum ?? (parseFloat(chart?.level) || 0);
 }
 
-function scoreItemHTML(s, rank) {
-  const lv    = getLevel(s.chart);
-  const diff  = s.chart?.difficulty ?? '';
-  const title = s.chart?.songTitle  || s.chartID;
-  const artist = s.chart?.artist   || '';
+function scoreItemHTML(s, rank, lvLabel) {
+  const lv    = lvLabel ?? s.chart?.data?.aiLevel ?? ('☆' + getLevel(s.chart));
+  const title = s.chart?.songTitle || s.chartID;
+  const artist = s.chart?.artist  || '';
   return `
     <div class="score-item">
       <div class="score-rank">${rank}</div>
@@ -483,8 +525,7 @@ function scoreItemHTML(s, rank) {
         <div class="score-title">${title}</div>
         ${artist ? `<div class="score-artist">${artist}</div>` : ''}
         <div class="score-meta">
-          <span class="lv-badge">☆${lv}</span>
-          ${diff ? '&nbsp;' + diff : ''}
+          <span class="lv-badge">${lv}</span>
         </div>
       </div>
       <div class="score-right">${lampBadge(s.scoreData?.lamp)}</div>
@@ -531,9 +572,9 @@ function renderRecommendList() {
   list.innerHTML = scores.map((s, i) => scoreItemHTML(s, i + 1)).join('');
 }
 
-document.querySelectorAll('.tab').forEach(btn => {
+document.querySelectorAll('#page-recommend .tab').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('#page-recommend .tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     activeRecommendTab = btn.dataset.tab;
     renderRecommendList();
@@ -564,7 +605,7 @@ async function loadStats() {
       </div>`).join('');
 
     const levels = Object.keys(byLevel)
-      .map(Number).filter(n => !isNaN(n) && n > 0)
+      .map(Number).filter(n => !isNaN(n))
       .sort((a, b) => a - b);
 
     if (levels.length === 0) { wrap.innerHTML = '<div class="status">データがありません</div>'; return; }
@@ -638,6 +679,7 @@ async function loadScores() {
     });
 
     renderScoreList();
+    if (document.getElementById('page-tables').classList.contains('active')) renderTableView();
   } catch(e) {
     list.innerHTML = `<div class="status">取得エラー: ${e.message}</div>`;
   }
@@ -656,6 +698,102 @@ function renderScoreList() {
   }
   list.innerHTML = filtered.slice(0, 100).map((s, i) => scoreItemHTML(s, i + 1)).join('');
 }
+
+// ── difficulty tables ─────────────────────────────────────────────────────────
+let activeTableTab = 'insane';
+// md5 (= chartID) → { table, level, levelNum }
+let tableIndex = new Map();
+let tableDataLoaded = false;
+
+async function loadTableData() {
+  document.getElementById('table-list').innerHTML = '<div class="status dot-loader">難易度表を取得中</div>';
+  try {
+    const data = await window.tachi.getTableData();
+    tableIndex = new Map();
+    for (const entries of Object.values(data)) {
+      for (const entry of entries) {
+        if (entry.md5) tableIndex.set(entry.md5.toLowerCase(), entry);
+      }
+    }
+    console.log('Table index:', tableIndex.size, 'entries');
+    tableDataLoaded = true;
+    renderTableView();
+  } catch(e) {
+    document.getElementById('table-list').innerHTML = `<div class="status">難易度表の取得に失敗: ${e.message}</div>`;
+  }
+}
+
+function renderTableView() {
+  const listEl  = document.getElementById('table-list');
+  const statsEl = document.getElementById('table-stats');
+
+  if (!allScores || !tableDataLoaded) {
+    listEl.innerHTML  = '<div class="status dot-loader">読み込み中</div>';
+    statsEl.innerHTML = '';
+    return;
+  }
+
+  // Match scores against the table index using hashMD5 from chart.data
+  const tableScores = allScores
+    .map(s => ({ s, entry: tableIndex.get((s.chart?.data?.hashMD5 || '').toLowerCase()) }))
+    .filter(({ entry }) => entry?.table === activeTableTab);
+
+  const counts = { FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 };
+  for (const { s } of tableScores) counts[lampCat(s.scoreData?.lamp)]++;
+  const hardPlus  = counts.HARD + counts.EXHARD + counts.FC;
+  const clearPlus = counts.CLEAR + hardPlus;
+
+  statsEl.innerHTML = [
+    ['総数',      tableScores.length,                          ''],
+    ['HARD以上',  hardPlus,                                    'c-hard'],
+    ['CLEAR以上', clearPlus,                                   'c-clear'],
+    ['未クリア',  counts.EASY + counts.ASSIST + counts.FAILED, ''],
+  ].map(([label, val, cls]) => `
+    <div class="stat-card">
+      <div class="stat-label">${label}</div>
+      <div class="stat-value ${cls}">${val}</div>
+    </div>`).join('');
+
+  if (tableScores.length === 0) {
+    listEl.innerHTML = '<div class="status">このテーブルのスコアがありません</div>';
+    return;
+  }
+
+  // Group by level from the table index
+  const byLevel = {};
+  for (const { s, entry } of tableScores) {
+    const lv = entry.levelNum;
+    if (!byLevel[lv]) byLevel[lv] = [];
+    byLevel[lv].push({ s, entry });
+  }
+
+  const levels = Object.keys(byLevel).map(Number).sort((a, b) => a - b);
+
+  listEl.innerHTML = levels.map(lv => {
+    const items = byLevel[lv].sort((a, b) => {
+      const la = LAMP_ORDER[lampCat(a.s.scoreData?.lamp)] ?? -1;
+      const lb = LAMP_ORDER[lampCat(b.s.scoreData?.lamp)] ?? -1;
+      return lb - la;
+    });
+    return `
+      <div class="level-section">
+        <div class="level-header">
+          <span>${items[0].entry.level.replace(/\d+$/, '') + lv}</span>
+          <span class="level-count">${items.length}曲</span>
+        </div>
+        <div class="score-list">${items.map(({ s, entry }, i) => scoreItemHTML(s, i + 1, entry.level)).join('')}</div>
+      </div>`;
+  }).join('');
+}
+
+document.querySelectorAll('#page-tables .tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#page-tables .tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    activeTableTab = btn.dataset.table;
+    renderTableView();
+  });
+});
 </script>
 </body>
 </html>

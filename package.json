@@ -10,12 +10,13 @@
   },
   "devDependencies": {
     "@types/node": "^25.9.2",
-    "electron": "^36.3.1",
+    "electron": "^36.9.5",
     "typescript": "^6.0.3"
   },
   "dependencies": {
     "axios": "^1.9.0",
-    "dotenv": "^16.5.0"
+    "dotenv": "^16.5.0",
+    "playwright-core": "^1.60.0"
   },
   "allowScripts": {
     "electron@36.9.5": true

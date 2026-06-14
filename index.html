@@ -900,7 +900,12 @@ document.querySelectorAll('#page-tables .tab').forEach(btn => {
 window.__test = {
   setScores: (data) => { allScores = data; },
   setTableData: (entries) => {
-    tableIndex = new Map(entries.map(e => [e.md5.toLowerCase(), e]));
+    tableIndex = new Map();
+    for (const e of entries) {
+      const key = e.md5.toLowerCase();
+      if (!tableIndex.has(key)) tableIndex.set(key, []);
+      tableIndex.get(key).push(e);
+    }
     tableDataLoaded = true;
   },
   setActiveTableTab: (tab) => { activeTableTab = tab; },

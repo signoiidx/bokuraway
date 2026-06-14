@@ -24,20 +24,23 @@ async function getPage(app) {
 // ── mock data ─────────────────────────────────────────────────────────────────
 
 const MD5 = {
-  insane11: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa01',
-  insane12: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa02',
-  none:     'ffff0000ffff0000ffff0000ffff0001',
+  insane11:  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa01',
+  insane12:  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa02',
+  insane13:  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa03', // unplayed — only in table, no score
+  none:      'ffff0000ffff0000ffff0000ffff0001',
 };
 
 const MOCK_SCORES = [
-  { chartID: 'c1', scoreData: { lamp: 'HARD CLEAR' }, chart: { levelNum: 11, difficulty: 'CHART', songTitle: '発狂曲A', artist: 'ArtistA', data: { hashMD5: MD5.insane11 } } },
-  { chartID: 'c2', scoreData: { lamp: 'CLEAR' },      chart: { levelNum: 12, difficulty: 'CHART', songTitle: '発狂曲B', artist: 'ArtistB', data: { hashMD5: MD5.insane12 } } },
-  { chartID: 'c3', scoreData: { lamp: 'FAILED' },     chart: { levelNum: 5,  difficulty: 'CHART', songTitle: '未登録曲', artist: 'ArtistC', data: { hashMD5: MD5.none     } } },
+  { chartID: 'c1', scoreData: { lamp: 'HARD CLEAR', optional: { bp: 42 } }, chart: { levelNum: 11, difficulty: 'CHART', songTitle: '発狂曲A', artist: 'ArtistA', data: { hashMD5: MD5.insane11 } } },
+  { chartID: 'c2', scoreData: { lamp: 'CLEAR' },                            chart: { levelNum: 12, difficulty: 'CHART', songTitle: '発狂曲B', artist: 'ArtistB', data: { hashMD5: MD5.insane12 } } },
+  { chartID: 'c3', scoreData: { lamp: 'FAILED' },                           chart: { levelNum: 5,  difficulty: 'CHART', songTitle: '未登録曲', artist: 'ArtistC', data: { hashMD5: MD5.none     } } },
 ];
 
+// MD5.insane13 is in the table but has no matching score → should appear as NO PLAY
 const MOCK_TABLE_ENTRIES = [
-  { md5: MD5.insane11, title: '発狂曲A', level: '★11', levelNum: 11, table: 'insane' },
-  { md5: MD5.insane12, title: '発狂曲B', level: '★12', levelNum: 12, table: 'insane' },
+  { md5: MD5.insane11, title: '発狂曲A',  level: '★11', levelNum: 11, table: 'insane' },
+  { md5: MD5.insane12, title: '発狂曲B',  level: '★12', levelNum: 12, table: 'insane' },
+  { md5: MD5.insane13, title: '未挑戦曲', level: '★13', levelNum: 13, table: 'insane' },
 ];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -145,8 +148,8 @@ describe('bokuraway e2e', async () => {
 
     it('"-" section contains the unmatched chart title', async () => {
       const dashSection = await page.evaluate(() => {
-        const headers = [...document.querySelectorAll('#page-tables .level-section')];
-        return headers
+        const sections = [...document.querySelectorAll('#page-tables .level-section')];
+        return sections
           .find(sec => sec.querySelector('.level-header span')?.textContent.trim() === '-')
           ?.querySelector('.score-list')?.innerText ?? '';
       });
@@ -155,21 +158,71 @@ describe('bokuraway e2e', async () => {
 
     it('matched charts do NOT appear in the "-" section', async () => {
       const dashSection = await page.evaluate(() => {
-        const headers = [...document.querySelectorAll('#page-tables .level-section')];
-        return headers
+        const sections = [...document.querySelectorAll('#page-tables .level-section')];
+        return sections
           .find(sec => sec.querySelector('.level-header span')?.textContent.trim() === '-')
           ?.querySelector('.score-list')?.innerText ?? '';
       });
       assert.ok(!dashSection.includes('発狂曲A'), 'matched chart should not be in "-" section');
     });
 
-    it('stat cards show correct totals', async () => {
+    it('stat テーブル総数 reflects played + unplayed', async () => {
       const totalCard = await page.evaluate(() => {
         const cards = [...document.querySelectorAll('#table-stats .stat-card')];
-        const total = cards.find(c => c.querySelector('.stat-label')?.textContent.trim() === '総数');
+        const total = cards.find(c => c.querySelector('.stat-label')?.textContent.trim() === 'テーブル総数');
         return total?.querySelector('.stat-value')?.textContent.trim();
       });
-      assert.equal(totalCard, '2', 'stat total should be 2 (only matched charts)');
+      // 2 played + 1 unplayed = 3
+      assert.equal(totalCard, '3', 'テーブル総数 should be 3 (2 played + 1 unplayed)');
+    });
+
+    it('stat 未挑戦 reflects unplayed entries', async () => {
+      const card = await page.evaluate(() => {
+        const cards = [...document.querySelectorAll('#table-stats .stat-card')];
+        return cards
+          .find(c => c.querySelector('.stat-label')?.textContent.trim() === '未挑戦')
+          ?.querySelector('.stat-value')?.textContent.trim();
+      });
+      assert.equal(card, '1', '未挑戦 should be 1');
+    });
+  });
+
+  // ── unplayed charts ──────────────────────────────────────────────────────────
+
+  describe('unplayed charts', () => {
+    it('renders NO PLAY badge for unplayed chart', async () => {
+      const found = await page.evaluate(() => !!document.querySelector('.lamp-NOPLAY'));
+      assert.ok(found, '.lamp-NOPLAY badge should exist for unplayed chart');
+    });
+
+    it('unplayed chart title appears in its level section', async () => {
+      const content = await page.evaluate(() =>
+        document.getElementById('table-list')?.innerText ?? ''
+      );
+      assert.ok(content.includes('未挑戦曲'), 'unplayed chart title should be rendered');
+    });
+
+    it('unplayed chart has .uncharted class', async () => {
+      const found = await page.evaluate(() => !!document.querySelector('.score-item.uncharted'));
+      assert.ok(found, '.score-item.uncharted should exist');
+    });
+  });
+
+  // ── level progress ───────────────────────────────────────────────────────────
+
+  describe('level progress', () => {
+    it('renders progress bars in level headers', async () => {
+      const count = await page.evaluate(() =>
+        document.querySelectorAll('#page-tables .level-progress').length
+      );
+      assert.ok(count > 0, 'level progress bars should be rendered');
+    });
+
+    it('level count shows played / total 曲 format', async () => {
+      const counts = await page.evaluate(() =>
+        [...document.querySelectorAll('#page-tables .level-count')].map(el => el.textContent.trim())
+      );
+      assert.ok(counts.some(c => c.includes('/')), 'level count should show played / total format');
     });
   });
 
@@ -177,17 +230,24 @@ describe('bokuraway e2e', async () => {
 
   describe('lamp badges', () => {
     it('HARD CLEAR renders .lamp-HARD badge', async () => {
-      const found = await page.evaluate(() =>
-        !!document.querySelector('.lamp-HARD')
-      );
+      const found = await page.evaluate(() => !!document.querySelector('.lamp-HARD'));
       assert.ok(found, '.lamp-HARD badge should be in the DOM');
     });
 
     it('FAILED renders .lamp-FAILED badge', async () => {
-      const found = await page.evaluate(() =>
-        !!document.querySelector('.lamp-FAILED')
-      );
+      const found = await page.evaluate(() => !!document.querySelector('.lamp-FAILED'));
       assert.ok(found, '.lamp-FAILED badge should be in the DOM');
+    });
+  });
+
+  // ── BP display ───────────────────────────────────────────────────────────────
+
+  describe('BP display', () => {
+    it('shows BP badge when scoreData.optional.bp is set', async () => {
+      const text = await page.evaluate(() =>
+        [...document.querySelectorAll('.bp-badge')].map(el => el.textContent.trim()).join(' ')
+      );
+      assert.ok(text.includes('42'), 'BP 42 should be shown in a .bp-badge');
     });
   });
 });

@@ -895,6 +895,23 @@ document.querySelectorAll('#page-tables .tab').forEach(btn => {
     renderTableView();
   });
 });
+
+// Test interface — only used by e2e tests, not reachable from normal app flow
+window.__test = {
+  setScores: (data) => { allScores = data; },
+  setTableData: (entries) => {
+    tableIndex = new Map();
+    for (const e of entries) {
+      const key = e.md5.toLowerCase();
+      if (!tableIndex.has(key)) tableIndex.set(key, []);
+      tableIndex.get(key).push(e);
+    }
+    tableDataLoaded = true;
+  },
+  setActiveTableTab: (tab) => { activeTableTab = tab; },
+  renderTableView,
+  renderScoreList,
+};
 </script>
 </body>
 </html>

@@ -36,6 +36,53 @@ function lampCat(lamp: string | undefined | null): LampCat {
   return 'FAILED';
 }
 
+// ─── Difficulty table fetching ────────────────────────────────────────────────
+
+interface DiffTableEntry {
+  md5: string;
+  title: string;
+  level: string;
+  levelNum: number;
+  table: string;
+}
+
+interface DiffTableConfig {
+  id: string;
+  symbol: string;
+  headerUrl: string;
+}
+
+const DIFF_TABLE_CONFIGS: DiffTableConfig[] = [
+  { id: 'insane',    symbol: '★',  headerUrl: 'https://miraiscarlet.github.io/bms/table/genocide_insane/header_insane.json' },
+  { id: 'satellite', symbol: 'sl', headerUrl: 'https://stellabms.xyz/sl/header.json' },
+  { id: 'stella',    symbol: 'st', headerUrl: 'https://stellabms.xyz/st/header.json' },
+  { id: 'overjoy',   symbol: '★★', headerUrl: 'https://lr2.sakura.ne.jp/data/header.json' },
+];
+
+async function fetchBmsTable(config: DiffTableConfig): Promise<DiffTableEntry[]> {
+  let headerUrl = config.headerUrl;
+
+  if (headerUrl.endsWith('.html')) {
+    const html = (await axios.get<string>(headerUrl, { timeout: 10_000 })).data as string;
+    const m = html.match(/name=["']bmstable["'][^>]*content=["']([^"']+)["']|content=["']([^"']+)["'][^>]*name=["']bmstable["']/i);
+    const metaUrl = m?.[1] || m?.[2];
+    if (!metaUrl) throw new Error(`No bmstable meta in ${headerUrl}`);
+    headerUrl = metaUrl;
+  }
+
+  const header = (await axios.get<{ data_url: string }>(headerUrl, { timeout: 10_000 })).data;
+  const dataUrl = new URL(header.data_url, headerUrl).href;
+  const entries = (await axios.get<unknown[]>(dataUrl, { timeout: 10_000 })).data;
+
+  return (entries as { md5?: string; title?: string; level?: string | number }[])
+    .map(e => {
+      const md5 = (e.md5 || '').toLowerCase().trim();
+      const rawLevel = String(e.level ?? '');
+      return { md5, title: e.title ?? '', level: `${config.symbol}${rawLevel}`, levelNum: parseInt(rawLevel) || 0, table: config.id };
+    })
+    .filter(e => /^[0-9a-f]{32}$/.test(e.md5));
+}
+
 // ─── Data helpers ─────────────────────────────────────────────────────────────
 
 interface TachiSong {
@@ -50,6 +97,13 @@ interface TachiChart {
   levelNum: number;
   difficulty: string;
   song?: TachiSong;
+  data?: {
+    hashMD5?: string;
+    hashSHA256?: string;
+    aiLevel?: string;
+    tableFolders?: Record<string, string>;
+    notecount?: number;
+  };
 }
 
 interface TachiScoreData {
@@ -246,4 +300,20 @@ ipcMain.handle('get-stats', async (_e, userID: number) => {
   }
 
   return { byLevel, totals, total: (data.pbs ?? []).length };
+});
+
+ipcMain.handle('get-table-data', async () => {
+  const result: Record<string, DiffTableEntry[]> = {};
+  await Promise.allSettled(
+    DIFF_TABLE_CONFIGS.map(async config => {
+      try {
+        result[config.id] = await fetchBmsTable(config);
+        console.log(`Table ${config.id}: ${result[config.id].length} entries`);
+      } catch (e) {
+        console.error(`Table ${config.id} failed:`, (e as AxiosError).message);
+        result[config.id] = [];
+      }
+    })
+  );
+  return result;
 });

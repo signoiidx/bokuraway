@@ -16,13 +16,13 @@
     --accent2:   #ff6a9b;
     --text:      #d8d8e8;
     --muted:     #6a6a82;
-    --c-fc:      #ff9cf5;
-    --c-exhard:  #ff5f5f;
-    --c-hard:    #4affa0;
+    --c-fc:      #f0abfc;
+    --c-exhard:  #ffd700;
+    --c-hard:    #f0f0f0;
     --c-clear:   #6ac8ff;
-    --c-easy:    #ffcc4a;
-    --c-assist:  #aaaaaa;
-    --c-failed:  #ff6a9b;
+    --c-easy:    #44ff88;
+    --c-assist:  #a855f7;
+    --c-failed:  #ff4444;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -235,7 +235,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .score-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .score-meta { font-size: 11px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .bp-badge { font-size: 10px; color: var(--muted); }
+  .score-item.uncharted { opacity: 0.45; }
   .score-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 
   /* ── lamp badge ── */
@@ -248,13 +250,20 @@
     letter-spacing: 1px;
     white-space: nowrap;
   }
-  .lamp-FC     { background: rgba(255,156,245,.15); color: var(--c-fc); }
-  .lamp-EXHARD { background: rgba(255,95,95,.15);   color: var(--c-exhard); }
-  .lamp-HARD   { background: rgba(74,255,160,.15);  color: var(--c-hard); }
+  .lamp-FC     { background: rgba(200,100,255,.12); }
+  .lamp-FC .rainbow-text {
+    background: linear-gradient(90deg, #ff5555, #ffcc00, #44ee44, #00ccff, #cc55ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .lamp-EXHARD { background: rgba(255,215,0,.15);   color: var(--c-exhard); }
+  .lamp-HARD   { background: rgba(240,240,240,.12); color: var(--c-hard); }
   .lamp-CLEAR  { background: rgba(106,200,255,.15); color: var(--c-clear); }
-  .lamp-EASY   { background: rgba(255,204,74,.15);  color: var(--c-easy); }
-  .lamp-ASSIST { background: rgba(170,170,170,.15); color: var(--c-assist); }
-  .lamp-FAILED { background: rgba(255,106,155,.15); color: var(--c-failed); }
+  .lamp-EASY   { background: rgba(68,255,136,.15);  color: var(--c-easy); }
+  .lamp-ASSIST  { background: rgba(168,85,247,.15);  color: var(--c-assist); }
+  .lamp-FAILED  { background: rgba(255,68,68,.15);   color: var(--c-failed); }
+  .lamp-NOPLAY  { background: rgba(100,100,120,.12); color: var(--muted); }
 
   /* ── level badge ── */
   .lv-badge {
@@ -322,6 +331,41 @@
   .cell-assist { color: var(--c-assist) !important; }
   .cell-failed { color: var(--c-failed) !important; }
 
+  /* ── level section ── */
+  .level-section { margin-bottom: 24px; }
+  .level-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 2px;
+    padding: 6px 0;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .level-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+  .level-progress {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .level-progress-fill {
+    height: 100%;
+    background: var(--c-hard);
+    border-radius: 2px;
+  }
+
   /* ── status / loader ── */
   .status { font-size: 13px; color: var(--muted); padding: 40px 0; text-align: center; }
   .dot-loader::after {
@@ -365,6 +409,9 @@
       <div class="nav-item" data-page="scores">
         <span class="nav-icon">📊</span> スコア一覧
       </div>
+      <div class="nav-item" data-page="tables">
+        <span class="nav-icon">📋</span> 難易度表
+      </div>
     </nav>
 
     <div id="content">
@@ -389,6 +436,22 @@
         <div class="page-sub">難易度別クリアランプ分布</div>
         <div id="stats-totals" class="stat-grid"></div>
         <div id="stats-table-wrap">
+          <div class="status dot-loader">読み込み中</div>
+        </div>
+      </div>
+
+      <!-- 難易度表ページ -->
+      <div class="page" id="page-tables">
+        <div class="page-title">DIFFICULTY TABLES</div>
+        <div class="page-sub">難易度表別スコア一覧（プレイ済みのみ）</div>
+        <div class="tab-bar" id="table-tab-bar">
+          <button class="tab active" data-table="insane">発狂難易度</button>
+          <button class="tab" data-table="satellite">Satellite</button>
+          <button class="tab" data-table="stella">Stella</button>
+          <button class="tab" data-table="overjoy">Overjoy</button>
+        </div>
+        <div id="table-stats" class="stat-grid"></div>
+        <div class="score-list" id="table-list">
           <div class="status dot-loader">読み込み中</div>
         </div>
       </div>
@@ -425,6 +488,7 @@ document.querySelectorAll('.nav-item').forEach(el => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     el.classList.add('active');
     document.getElementById('page-' + el.dataset.page).classList.add('active');
+    if (el.dataset.page === 'tables') renderTableView();
   });
 });
 
@@ -442,6 +506,7 @@ document.getElementById('btn-login').addEventListener('click', async () => {
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('main-screen').classList.add('active');
     Promise.all([loadRecommend(), loadStats(), loadScores()]);
+    loadTableData();
   } catch(e) {
     status.textContent = 'ユーザー情報の取得に失敗しました';
   }
@@ -464,18 +529,33 @@ const LAMP_LABEL = { FC: 'FULL COMBO', EXHARD: 'EX HARD', HARD: 'HARD', CLEAR: '
 
 function lampBadge(lamp) {
   const cat = lampCat(lamp);
-  return `<span class="lamp-badge lamp-${cat}">${LAMP_LABEL[cat]}</span>`;
+  const label = cat === 'FC'
+    ? `<span class="rainbow-text">${LAMP_LABEL[cat]}</span>`
+    : LAMP_LABEL[cat];
+  return `<span class="lamp-badge lamp-${cat}">${label}</span>`;
 }
 
 function getLevel(chart) {
   return chart?.levelNum ?? (parseFloat(chart?.level) || 0);
 }
 
-function scoreItemHTML(s, rank) {
-  const lv    = getLevel(s.chart);
-  const diff  = s.chart?.difficulty ?? '';
-  const title = s.chart?.songTitle  || s.chartID;
-  const artist = s.chart?.artist   || '';
+// 譜面が合致する全テーブルの難易度表記を返す。どこにも載っていなければ "-"
+function getTableLabels(s) {
+  const md5 = (s.chart?.data?.hashMD5 || '').toLowerCase();
+  if (!md5) return '-';
+  const entries = tableIndex.get(md5);
+  return entries && entries.length > 0 ? entries.map(e => e.level).join(' / ') : '-';
+}
+
+function scoreItemHTML(s, rank, lvLabel) {
+  const lv = lvLabel !== undefined
+    ? lvLabel
+    : tableDataLoaded
+      ? getTableLabels(s)
+      : (s.chart?.data?.aiLevel ?? ('☆' + getLevel(s.chart)));
+  const title  = s.chart?.songTitle || s.chartID;
+  const artist = s.chart?.artist    || '';
+  const bp     = s.scoreData?.optional?.bp;
   return `
     <div class="score-item">
       <div class="score-rank">${rank}</div>
@@ -483,11 +563,23 @@ function scoreItemHTML(s, rank) {
         <div class="score-title">${title}</div>
         ${artist ? `<div class="score-artist">${artist}</div>` : ''}
         <div class="score-meta">
-          <span class="lv-badge">☆${lv}</span>
-          ${diff ? '&nbsp;' + diff : ''}
+          <span class="lv-badge">${lv}</span>
+          ${bp != null ? `<span class="bp-badge">BP ${bp}</span>` : ''}
         </div>
       </div>
       <div class="score-right">${lampBadge(s.scoreData?.lamp)}</div>
+    </div>`;
+}
+
+function unchartedItemHTML(entry, rank) {
+  return `
+    <div class="score-item uncharted">
+      <div class="score-rank">${rank}</div>
+      <div>
+        <div class="score-title">${entry.title || '(no title)'}</div>
+        <div class="score-meta"><span class="lv-badge">${entry.level}</span></div>
+      </div>
+      <div class="score-right"><span class="lamp-badge lamp-NOPLAY">NO PLAY</span></div>
     </div>`;
 }
 
@@ -531,9 +623,9 @@ function renderRecommendList() {
   list.innerHTML = scores.map((s, i) => scoreItemHTML(s, i + 1)).join('');
 }
 
-document.querySelectorAll('.tab').forEach(btn => {
+document.querySelectorAll('#page-recommend .tab').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('#page-recommend .tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     activeRecommendTab = btn.dataset.tab;
     renderRecommendList();
@@ -564,7 +656,7 @@ async function loadStats() {
       </div>`).join('');
 
     const levels = Object.keys(byLevel)
-      .map(Number).filter(n => !isNaN(n) && n > 0)
+      .map(Number).filter(n => !isNaN(n))
       .sort((a, b) => a - b);
 
     if (levels.length === 0) { wrap.innerHTML = '<div class="status">データがありません</div>'; return; }
@@ -638,6 +730,7 @@ async function loadScores() {
     });
 
     renderScoreList();
+    if (document.getElementById('page-tables').classList.contains('active')) renderTableView();
   } catch(e) {
     list.innerHTML = `<div class="status">取得エラー: ${e.message}</div>`;
   }
@@ -656,6 +749,152 @@ function renderScoreList() {
   }
   list.innerHTML = filtered.slice(0, 100).map((s, i) => scoreItemHTML(s, i + 1)).join('');
 }
+
+// ── difficulty tables ─────────────────────────────────────────────────────────
+let activeTableTab = 'insane';
+// md5 → DiffTableEntry[]  (1曲が複数テーブルに載ることがあるため配列)
+let tableIndex = new Map();
+let tableDataLoaded = false;
+
+async function loadTableData() {
+  document.getElementById('table-list').innerHTML = '<div class="status dot-loader">難易度表を取得中</div>';
+  try {
+    const data = await window.tachi.getTableData();
+    tableIndex = new Map();
+    for (const entries of Object.values(data)) {
+      for (const entry of entries) {
+        if (!entry.md5) continue;
+        const key = entry.md5.toLowerCase();
+        if (!tableIndex.has(key)) tableIndex.set(key, []);
+        tableIndex.get(key).push(entry);
+      }
+    }
+    console.log('Table index:', tableIndex.size, 'charts');
+    tableDataLoaded = true;
+    renderTableView();
+  } catch(e) {
+    document.getElementById('table-list').innerHTML = `<div class="status">難易度表の取得に失敗: ${e.message}</div>`;
+  }
+}
+
+function renderTableView() {
+  const listEl  = document.getElementById('table-list');
+  const statsEl = document.getElementById('table-stats');
+
+  if (!allScores || !tableDataLoaded) {
+    listEl.innerHTML  = '<div class="status dot-loader">読み込み中</div>';
+    statsEl.innerHTML = '';
+    return;
+  }
+
+  // Match played scores against the active table
+  const mapped = allScores.map(s => {
+    const allEntries = tableIndex.get((s.chart?.data?.hashMD5 || '').toLowerCase()) ?? [];
+    return { s, entry: allEntries.find(e => e.table === activeTableTab) ?? null };
+  });
+  const tableScores     = mapped.filter(({ entry }) => entry !== null);
+  const unmatchedScores = mapped.filter(({ entry }) => entry === null);
+
+  // Find table entries that have no matching played score (未挑戦)
+  const playedMD5s = new Set(
+    allScores.map(s => (s.chart?.data?.hashMD5 || '').toLowerCase()).filter(Boolean)
+  );
+  const unplayedEntries = [];
+  for (const [md5, entries] of tableIndex) {
+    const entry = entries.find(e => e.table === activeTableTab);
+    if (entry && !playedMD5s.has(md5)) unplayedEntries.push(entry);
+  }
+
+  const counts = { FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 };
+  for (const { s } of tableScores) counts[lampCat(s.scoreData?.lamp)]++;
+  const hardPlus  = counts.HARD + counts.EXHARD + counts.FC;
+  const clearPlus = counts.CLEAR + hardPlus;
+
+  statsEl.innerHTML = [
+    ['テーブル総数', tableScores.length + unplayedEntries.length, ''],
+    ['HARD以上',    hardPlus,                                     'c-hard'],
+    ['CLEAR以上',   clearPlus,                                    'c-clear'],
+    ['未挑戦',      unplayedEntries.length,                       ''],
+  ].map(([label, val, cls]) => `
+    <div class="stat-card">
+      <div class="stat-label">${label}</div>
+      <div class="stat-value ${cls}">${val}</div>
+    </div>`).join('');
+
+  if (tableScores.length === 0 && unplayedEntries.length === 0) {
+    listEl.innerHTML = '<div class="status">このテーブルのスコアがありません</div>';
+    return;
+  }
+
+  // Group played and unplayed by level
+  const byLevel = {};
+  for (const { s, entry } of tableScores) {
+    const lv = entry.levelNum;
+    if (!byLevel[lv]) byLevel[lv] = { played: [], unplayed: [] };
+    byLevel[lv].played.push({ s, entry });
+  }
+  for (const entry of unplayedEntries) {
+    const lv = entry.levelNum;
+    if (!byLevel[lv]) byLevel[lv] = { played: [], unplayed: [] };
+    byLevel[lv].unplayed.push(entry);
+  }
+
+  const levels = Object.keys(byLevel).map(Number).sort((a, b) => a - b);
+
+  const sortedSections = levels.map(lv => {
+    const { played, unplayed } = byLevel[lv];
+    const total     = played.length + unplayed.length;
+    const hardCount = played.filter(({ s }) => ['HARD', 'EXHARD', 'FC'].includes(lampCat(s.scoreData?.lamp))).length;
+    const hardPct   = total > 0 ? Math.round(hardCount / total * 100) : 0;
+    const symbol    = (played[0]?.entry ?? unplayed[0])?.level.replace(/\d+$/, '') ?? '';
+
+    const sortedPlayed = played.slice().sort((a, b) => {
+      const la = LAMP_ORDER[lampCat(a.s.scoreData?.lamp)] ?? -1;
+      const lb = LAMP_ORDER[lampCat(b.s.scoreData?.lamp)] ?? -1;
+      return lb - la;
+    });
+
+    return `
+      <div class="level-section">
+        <div class="level-header">
+          <span>${symbol}${lv}</span>
+          <div class="level-progress"><div class="level-progress-fill" style="width:${hardPct}%"></div></div>
+          <span class="level-count">${played.length} / ${total}曲</span>
+        </div>
+        <div class="score-list">
+          ${sortedPlayed.map(({ s, entry }, i) => scoreItemHTML(s, i + 1, entry.level)).join('')}
+          ${unplayed.map((entry, i) => unchartedItemHTML(entry, played.length + i + 1)).join('')}
+        </div>
+      </div>`;
+  });
+
+  if (unmatchedScores.length > 0) {
+    const sortedUnmatched = unmatchedScores.slice().sort((a, b) => {
+      const la = LAMP_ORDER[lampCat(a.s.scoreData?.lamp)] ?? -1;
+      const lb = LAMP_ORDER[lampCat(b.s.scoreData?.lamp)] ?? -1;
+      return lb - la;
+    });
+    sortedSections.push(`
+      <div class="level-section">
+        <div class="level-header">
+          <span>-</span>
+          <span class="level-count">${sortedUnmatched.length}曲</span>
+        </div>
+        <div class="score-list">${sortedUnmatched.map(({ s }, i) => scoreItemHTML(s, i + 1, '-')).join('')}</div>
+      </div>`);
+  }
+
+  listEl.innerHTML = sortedSections.join('');
+}
+
+document.querySelectorAll('#page-tables .tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#page-tables .tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    activeTableTab = btn.dataset.table;
+    renderTableView();
+  });
+});
 </script>
 </body>
 </html>

@@ -235,7 +235,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .score-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .score-meta { font-size: 11px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .bp-badge { font-size: 10px; color: var(--muted); }
+  .score-item.uncharted { opacity: 0.45; }
   .score-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 
   /* ── lamp badge ── */
@@ -259,8 +261,9 @@
   .lamp-HARD   { background: rgba(240,240,240,.12); color: var(--c-hard); }
   .lamp-CLEAR  { background: rgba(106,200,255,.15); color: var(--c-clear); }
   .lamp-EASY   { background: rgba(68,255,136,.15);  color: var(--c-easy); }
-  .lamp-ASSIST { background: rgba(168,85,247,.15);  color: var(--c-assist); }
-  .lamp-FAILED { background: rgba(255,68,68,.15);   color: var(--c-failed); }
+  .lamp-ASSIST  { background: rgba(168,85,247,.15);  color: var(--c-assist); }
+  .lamp-FAILED  { background: rgba(255,68,68,.15);   color: var(--c-failed); }
+  .lamp-NOPLAY  { background: rgba(100,100,120,.12); color: var(--muted); }
 
   /* ── level badge ── */
   .lv-badge {
@@ -348,6 +351,19 @@
     font-weight: 600;
     color: var(--muted);
     letter-spacing: 0;
+    white-space: nowrap;
+  }
+  .level-progress {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .level-progress-fill {
+    height: 100%;
+    background: var(--c-hard);
+    border-radius: 2px;
   }
 
   /* ── status / loader ── */
@@ -537,8 +553,9 @@ function scoreItemHTML(s, rank, lvLabel) {
     : tableDataLoaded
       ? getTableLabels(s)
       : (s.chart?.data?.aiLevel ?? ('☆' + getLevel(s.chart)));
-  const title = s.chart?.songTitle || s.chartID;
-  const artist = s.chart?.artist  || '';
+  const title  = s.chart?.songTitle || s.chartID;
+  const artist = s.chart?.artist    || '';
+  const bp     = s.scoreData?.optional?.bp;
   return `
     <div class="score-item">
       <div class="score-rank">${rank}</div>
@@ -547,9 +564,22 @@ function scoreItemHTML(s, rank, lvLabel) {
         ${artist ? `<div class="score-artist">${artist}</div>` : ''}
         <div class="score-meta">
           <span class="lv-badge">${lv}</span>
+          ${bp != null ? `<span class="bp-badge">BP ${bp}</span>` : ''}
         </div>
       </div>
       <div class="score-right">${lampBadge(s.scoreData?.lamp)}</div>
+    </div>`;
+}
+
+function unchartedItemHTML(entry, rank) {
+  return `
+    <div class="score-item uncharted">
+      <div class="score-rank">${rank}</div>
+      <div>
+        <div class="score-title">${entry.title || '(no title)'}</div>
+        <div class="score-meta"><span class="lv-badge">${entry.level}</span></div>
+      </div>
+      <div class="score-right"><span class="lamp-badge lamp-NOPLAY">NO PLAY</span></div>
     </div>`;
 }
 
@@ -757,7 +787,7 @@ function renderTableView() {
     return;
   }
 
-  // Match scores against the table index using hashMD5 from chart.data
+  // Match played scores against the active table
   const mapped = allScores.map(s => {
     const allEntries = tableIndex.get((s.chart?.data?.hashMD5 || '').toLowerCase()) ?? [];
     return { s, entry: allEntries.find(e => e.table === activeTableTab) ?? null };
@@ -765,50 +795,76 @@ function renderTableView() {
   const tableScores     = mapped.filter(({ entry }) => entry !== null);
   const unmatchedScores = mapped.filter(({ entry }) => entry === null);
 
+  // Find table entries that have no matching played score (未挑戦)
+  const playedMD5s = new Set(
+    allScores.map(s => (s.chart?.data?.hashMD5 || '').toLowerCase()).filter(Boolean)
+  );
+  const unplayedEntries = [];
+  for (const [md5, entries] of tableIndex) {
+    const entry = entries.find(e => e.table === activeTableTab);
+    if (entry && !playedMD5s.has(md5)) unplayedEntries.push(entry);
+  }
+
   const counts = { FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 };
   for (const { s } of tableScores) counts[lampCat(s.scoreData?.lamp)]++;
   const hardPlus  = counts.HARD + counts.EXHARD + counts.FC;
   const clearPlus = counts.CLEAR + hardPlus;
 
   statsEl.innerHTML = [
-    ['総数',      tableScores.length,                          ''],
-    ['HARD以上',  hardPlus,                                    'c-hard'],
-    ['CLEAR以上', clearPlus,                                   'c-clear'],
-    ['未クリア',  counts.EASY + counts.ASSIST + counts.FAILED, ''],
+    ['テーブル総数', tableScores.length + unplayedEntries.length, ''],
+    ['HARD以上',    hardPlus,                                     'c-hard'],
+    ['CLEAR以上',   clearPlus,                                    'c-clear'],
+    ['未挑戦',      unplayedEntries.length,                       ''],
   ].map(([label, val, cls]) => `
     <div class="stat-card">
       <div class="stat-label">${label}</div>
       <div class="stat-value ${cls}">${val}</div>
     </div>`).join('');
 
-  if (tableScores.length === 0 && unmatchedScores.length === 0) {
+  if (tableScores.length === 0 && unplayedEntries.length === 0) {
     listEl.innerHTML = '<div class="status">このテーブルのスコアがありません</div>';
     return;
   }
 
-  // Group by level from the table index
+  // Group played and unplayed by level
   const byLevel = {};
   for (const { s, entry } of tableScores) {
     const lv = entry.levelNum;
-    if (!byLevel[lv]) byLevel[lv] = [];
-    byLevel[lv].push({ s, entry });
+    if (!byLevel[lv]) byLevel[lv] = { played: [], unplayed: [] };
+    byLevel[lv].played.push({ s, entry });
+  }
+  for (const entry of unplayedEntries) {
+    const lv = entry.levelNum;
+    if (!byLevel[lv]) byLevel[lv] = { played: [], unplayed: [] };
+    byLevel[lv].unplayed.push(entry);
   }
 
   const levels = Object.keys(byLevel).map(Number).sort((a, b) => a - b);
 
   const sortedSections = levels.map(lv => {
-    const items = byLevel[lv].sort((a, b) => {
+    const { played, unplayed } = byLevel[lv];
+    const total     = played.length + unplayed.length;
+    const hardCount = played.filter(({ s }) => ['HARD', 'EXHARD', 'FC'].includes(lampCat(s.scoreData?.lamp))).length;
+    const hardPct   = total > 0 ? Math.round(hardCount / total * 100) : 0;
+    const symbol    = (played[0]?.entry ?? unplayed[0])?.level.replace(/\d+$/, '') ?? '';
+
+    const sortedPlayed = played.slice().sort((a, b) => {
       const la = LAMP_ORDER[lampCat(a.s.scoreData?.lamp)] ?? -1;
       const lb = LAMP_ORDER[lampCat(b.s.scoreData?.lamp)] ?? -1;
       return lb - la;
     });
+
     return `
       <div class="level-section">
         <div class="level-header">
-          <span>${items[0].entry.level.replace(/\d+$/, '') + lv}</span>
-          <span class="level-count">${items.length}曲</span>
+          <span>${symbol}${lv}</span>
+          <div class="level-progress"><div class="level-progress-fill" style="width:${hardPct}%"></div></div>
+          <span class="level-count">${played.length} / ${total}曲</span>
         </div>
-        <div class="score-list">${items.map(({ s, entry }, i) => scoreItemHTML(s, i + 1, entry.level)).join('')}</div>
+        <div class="score-list">
+          ${sortedPlayed.map(({ s, entry }, i) => scoreItemHTML(s, i + 1, entry.level)).join('')}
+          ${unplayed.map((entry, i) => unchartedItemHTML(entry, played.length + i + 1)).join('')}
+        </div>
       </div>`;
   });
 

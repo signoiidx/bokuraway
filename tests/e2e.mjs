@@ -70,9 +70,10 @@ describe('bokuraway e2e', async () => {
   let app, page;
 
   before(async () => {
+    const sandboxArgs = process.env.CI ? ['--no-sandbox', '--disable-setuid-sandbox'] : [];
     app = await electron.launch({
       executablePath: electronBin(),
-      args: [APP_DIR],
+      args: [APP_DIR, ...sandboxArgs],
       env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1' },
       timeout: 30_000,
     });

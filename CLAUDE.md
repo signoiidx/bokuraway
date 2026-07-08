@@ -19,7 +19,7 @@ TypeScript source is compiled to `dist/` before launch (`tsc`). `npm start` runs
 ## Testing
 
 ```
-npm test   # tsc build → node tests/e2e.mjs (Playwright + node:test, 18 tests)
+npm test   # tsc build → node --test tests/nudge.test.mjs (unit tests) → node tests/e2e.mjs (Playwright + node:test)
 ```
 
 Screenshots are written to `tests/shots/` (gitignored) on each run.
@@ -29,6 +29,7 @@ Screenshots are written to `tests/shots/` (gitignored) on each run.
 The app follows Electron's standard main/renderer split with context isolation:
 
 - **`src/main.ts`** — Main process. Creates the `BrowserWindow`, runs an OAuth callback server on `http://localhost:8080/callback`, and exposes six IPC handlers: `oauth-start`, `get-me`, `get-scores`, `get-recommend`, `get-stats`, `get-table-data`. All Bokutachi API calls go through `tachiGet()` using the stored `accessToken`. Difficulty table data is fetched from external JSON endpoints via `fetchBmsTable()`.
+- **`src/nudge.ts`** — Pure module with the lamp helpers (`lampCat`, `LAMP_ORDER`) and the nudge logic (`computeNudges`). No Electron imports, so `tests/nudge.test.mjs` unit-tests the compiled `dist/nudge.js` directly without launching the app.
 - **`src/preload.ts`** — Context bridge. Exposes `window.tachi` to the renderer with six methods: `startOAuth`, `getMe`, `getScores`, `getRecommend`, `getStats`, `getTableData`. `nodeIntegration` is disabled.
 - **`index.html`** — Single-file renderer (HTML + CSS + JS). Handles the auth screen, sidebar navigation, and four pages: "レコメンド" (Recommend), "スコア一覧" (Score List), "統計" (Stats), "難易度表" (Difficulty Tables). No framework or bundler.
 
@@ -38,9 +39,12 @@ The app follows Electron's standard main/renderer split with context isolation:
 
 ```js
 window.__test = {
-  setScores(data),          // sets allScores
-  setTableData(entries),    // builds tableIndex (Map<md5, entry[]>) and sets tableDataLoaded = true
-  setActiveTableTab(tab),   // sets activeTableTab
+  setScores(data),            // sets allScores
+  setRecommendData(data),     // sets recommendData ({ nudges, toHard, toClear })
+  setActiveRecommendTab(tab), // sets activeRecommendTab ('nudges' | 'toHard' | 'toClear')
+  renderRecommendList(),
+  setTableData(entries),      // builds tableIndex (Map<md5, entry[]>) and sets tableDataLoaded = true
+  setActiveTableTab(tab),     // sets activeTableTab
   renderTableView(),
   renderScoreList(),
 }
@@ -68,9 +72,23 @@ Credentials (`CLIENT_ID`, `CLIENT_SECRET`) are read from `.env` via `dotenv`.
 
 1. Fetches all BMS 7K PBs for the user via `/users/:userID/games/bms-7k/pbs/all`.
 2. Deduplicates to one entry per chart keeping the best lamp (`bestPerChart`).
-3. Returns `{ toHard, toClear }`:
+3. Returns `{ nudges, toHard, toClear }`:
+   - `nudges` — charts where a concrete goal is within reach (see below), sorted by closeness descending.
    - `toHard` — charts CLEARed or EASY CLEARed but not yet HARD CLEARed, sorted ascending by level.
    - `toClear` — charts below CLEAR (EASY, ASSIST, FAILED), sorted ascending by level.
+
+### Nudge logic (`src/nudge.ts`)
+
+`computeNudges(pbs)` detects charts where a specific goal looks achievable but isn't achieved yet. Each chart gets at most one nudge (the candidate with the highest `closeness`, 0–1). Rules:
+
+- **Next lamp via BP rate** (`bp / notecount`; falls back to absolute BP when `chart.data.notecount` is missing):
+  - FAILED/ASSIST → CLEAR when BP rate ≤ 5% (abs BP ≤ 30)
+  - EASY/CLEAR → HARD CLEAR when BP rate ≤ 3.5% (abs BP ≤ 20)
+  - HARD → EX HARD when BP rate ≤ 1.5% (abs BP ≤ 10)
+- **FULL COMBO** — lamp ≥ CLEAR (not FC) and BP ≤ 5.
+- **Grade up** — `scoreData.percent` within 1.0 point below the next Tachi grade boundary: AA (700/9 %), AAA (800/9 %), MAX- (1700/18 %).
+
+Each nudge is `{ goal, reason, closeness }`; `reason` is the Japanese label rendered in the `.nudge-badge` chip. The renderer shows nudges in the 「あと一歩」tab (default tab, `data-tab="nudges"`) on the recommend page.
 
 ## Difficulty table logic
 

@@ -36,6 +36,19 @@ const MOCK_SCORES = [
   { chartID: 'c3', scoreData: { lamp: 'FAILED' },                           chart: { levelNum: 5,  difficulty: 'CHART', songTitle: '未登録曲', artist: 'ArtistC', data: { hashMD5: MD5.none     } } },
 ];
 
+const MOCK_RECOMMEND = {
+  nudges: [
+    {
+      chartID: 'c1',
+      nudge: { goal: 'HARD CLEAR', reason: 'HARD CLEARが狙えるBP率 1.0%', closeness: 0.71 },
+      scoreData: { lamp: 'CLEAR', optional: { bp: 10 } },
+      chart: { levelNum: 11, difficulty: 'CHART', songTitle: '発狂曲A', artist: 'ArtistA', data: { hashMD5: MD5.insane11 } },
+    },
+  ],
+  toHard: [],
+  toClear: [],
+};
+
 // MD5.insane13 is in the table but has no matching score → should appear as NO PLAY
 const MOCK_TABLE_ENTRIES = [
   { md5: MD5.insane11, title: '発狂曲A',  level: '★11', levelNum: 11, table: 'insane' },
@@ -249,6 +262,53 @@ describe('bokuraway e2e', async () => {
         [...document.querySelectorAll('.bp-badge')].map(el => el.textContent.trim()).join(' ')
       );
       assert.ok(text.includes('42'), 'BP 42 should be shown in a .bp-badge');
+    });
+  });
+
+  // ── recommend nudge ──────────────────────────────────────────────────────────
+
+  describe('recommend nudge', () => {
+    before(async () => {
+      await page.evaluate((recommend) => {
+        window.__test.setRecommendData(recommend);
+        window.__test.setActiveRecommendTab('nudges');
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById('page-recommend').classList.add('active');
+        window.__test.renderRecommendList();
+      }, MOCK_RECOMMEND);
+      await page.waitForTimeout(100);
+    });
+
+    it('has あと一歩 tab on the recommend page', async () => {
+      const tabs = await page.evaluate(() =>
+        [...document.querySelectorAll('#page-recommend .tab')].map(t => t.dataset.tab)
+      );
+      assert.ok(tabs.includes('nudges'), 'recommend tab "nudges" should exist');
+      assert.ok(tabs.includes('toHard'), 'recommend tab "toHard" should still exist');
+    });
+
+    it('renders nudge badge with the goal reason', async () => {
+      const text = await page.evaluate(() =>
+        [...document.querySelectorAll('#recommend-list .nudge-badge')].map(el => el.textContent.trim()).join(' ')
+      );
+      assert.ok(text.includes('HARD CLEARが狙えるBP率 1.0%'), 'nudge reason should be rendered');
+      await page.screenshot({ path: path.join(SHOT_DIR, '03-recommend-nudge.png') });
+    });
+
+    it('renders the nudged song title', async () => {
+      const content = await page.evaluate(() =>
+        document.getElementById('recommend-list')?.innerText ?? ''
+      );
+      assert.ok(content.includes('発狂曲A'), 'nudged song title should be rendered');
+    });
+
+    it('shows guidance message when nudges are empty', async () => {
+      const content = await page.evaluate((recommend) => {
+        window.__test.setRecommendData({ ...recommend, nudges: [] });
+        window.__test.renderRecommendList();
+        return document.getElementById('recommend-list')?.innerText ?? '';
+      }, MOCK_RECOMMEND);
+      assert.ok(content.includes('「あと一歩」の譜面が見つかりません'), 'empty nudge message should be shown');
     });
   });
 });

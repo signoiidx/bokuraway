@@ -3,6 +3,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import http from 'http';
 import path from 'path';
 import axios, { AxiosError } from 'axios';
+import { LampCat, LAMP_ORDER, lampCat, computeNudges } from './nudge';
 
 console.log('CLIENT_ID:', process.env.CLIENT_ID);
 console.log('CLIENT_SECRET:', process.env.CLIENT_SECRET ? '***loaded***' : 'UNDEFINED');
@@ -15,26 +16,6 @@ const TACHI_BASE = 'https://boku.tachi.ac/api/v1';
 let mainWindow: BrowserWindow | null = null;
 let accessToken: string | null = null;
 let callbackServer: http.Server | null = null;
-
-// ─── Lamp helpers ─────────────────────────────────────────────────────────────
-
-type LampCat = 'FAILED' | 'ASSIST' | 'EASY' | 'CLEAR' | 'HARD' | 'EXHARD' | 'FC';
-
-const LAMP_ORDER: Record<LampCat, number> = {
-  FAILED: 0, ASSIST: 1, EASY: 2, CLEAR: 3, HARD: 4, EXHARD: 5, FC: 6,
-};
-
-function lampCat(lamp: string | undefined | null): LampCat {
-  if (!lamp) return 'FAILED';
-  const l = lamp.toUpperCase();
-  if (l.includes('FULL COMBO')) return 'FC';
-  if (l.startsWith('EX HARD'))  return 'EXHARD';
-  if (l === 'HARD CLEAR' || l === 'HARD') return 'HARD';
-  if (l === 'CLEAR')            return 'CLEAR';
-  if (l === 'EASY CLEAR' || l === 'EASY') return 'EASY';
-  if (l.includes('ASSIST'))     return 'ASSIST';
-  return 'FAILED';
-}
 
 // ─── Difficulty table fetching ────────────────────────────────────────────────
 
@@ -108,6 +89,9 @@ interface TachiChart {
 
 interface TachiScoreData {
   lamp?: string;
+  percent?: number;
+  grade?: string;
+  optional?: { bp?: number | null };
 }
 
 interface TachiPB {
@@ -253,18 +237,20 @@ ipcMain.handle('get-scores', async (_e, userID: number) => {
   return joinedPBs(data);
 });
 
-// Returns { toHard: [...], toClear: [...] } — best lamp per chart, sorted by level
+// Returns { nudges: [...], toHard: [...], toClear: [...] } — best lamp per chart.
+// nudges = 目標達成まであと一歩の譜面 (closeness 降順)。toHard/toClear はレベル昇順。
 ipcMain.handle('get-recommend', async (_e, userID: number) => {
   console.log('get-recommend userID:', userID);
   let data: TachiPBsResponse;
   try {
     data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`) as TachiPBsResponse;
   } catch (e) {
-    if ((e as AxiosError).response?.status === 404) return { toHard: [], toClear: [], noProfile: true };
+    if ((e as AxiosError).response?.status === 404) return { nudges: [], toHard: [], toClear: [], noProfile: true };
     throw e;
   }
 
   const best = bestPerChart(joinedPBs(data));
+  const nudges = computeNudges(best);
   const toHard = best
     .filter(s => (LAMP_ORDER[lampCat(s.scoreData?.lamp)] ?? -1) < LAMP_ORDER.HARD)
     .sort((a, b) => getLevel(a.chart) - getLevel(b.chart));
@@ -272,7 +258,7 @@ ipcMain.handle('get-recommend', async (_e, userID: number) => {
     .filter(s => (LAMP_ORDER[lampCat(s.scoreData?.lamp)] ?? -1) < LAMP_ORDER.CLEAR)
     .sort((a, b) => getLevel(a.chart) - getLevel(b.chart));
 
-  return { toHard, toClear };
+  return { nudges, toHard, toClear };
 });
 
 // Returns { byLevel: { [lv]: { FC, EXHARD, HARD, CLEAR, EASY, ASSIST, FAILED } }, totals, total }

@@ -632,7 +632,7 @@ function renderRecommendList() {
   const scores = recommendData[activeRecommendTab] ?? [];
   if (scores.length === 0) {
     const msg = activeRecommendTab === 'nudges'
-      ? '「あと一歩」の譜面が見つかりません。BP率の低い譜面がここに表示されます。'
+      ? '「あと一歩」の譜面が見つかりません。BP率の低い譜面やグレード境界（A/AA/AAA）に近い譜面がここに表示されます。'
       : activeRecommendTab === 'toHard'
         ? 'HARD CLEAR候補がありません。EASY CLEAR数を増やしましょう！'
         : 'EASY CLEAR候補がありません。';

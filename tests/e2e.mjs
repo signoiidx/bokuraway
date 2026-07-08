@@ -44,6 +44,12 @@ const MOCK_RECOMMEND = {
       scoreData: { lamp: 'CLEAR', optional: { bp: 10 } },
       chart: { levelNum: 11, difficulty: 'CHART', songTitle: '発狂曲A', artist: 'ArtistA', data: { hashMD5: MD5.insane11 } },
     },
+    {
+      chartID: 'c2',
+      nudge: { goal: 'AAA', reason: 'AAAまであと0.39%', closeness: 0.61 },
+      scoreData: { lamp: 'HARD CLEAR', percent: 88.5, optional: { bp: 31 } },
+      chart: { levelNum: 12, difficulty: 'CHART', songTitle: '発狂曲B', artist: 'ArtistB', data: { hashMD5: MD5.insane12 } },
+    },
   ],
   toHard: [],
   toEasy: [],
@@ -292,7 +298,8 @@ describe('bokuraway e2e', async () => {
       const text = await page.evaluate(() =>
         [...document.querySelectorAll('#recommend-list .nudge-badge')].map(el => el.textContent.trim()).join(' ')
       );
-      assert.ok(text.includes('HARD CLEARが狙えるBP率 1.0%'), 'nudge reason should be rendered');
+      assert.ok(text.includes('HARD CLEARが狙えるBP率 1.0%'), 'lamp nudge reason should be rendered');
+      assert.ok(text.includes('AAAまであと0.39%'), 'grade nudge reason should be rendered');
       await page.screenshot({ path: path.join(SHOT_DIR, '03-recommend-nudge.png') });
     });
 

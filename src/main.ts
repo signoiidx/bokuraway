@@ -89,6 +89,7 @@ interface TachiChart {
 
 interface TachiScoreData {
   lamp?: string;
+  percent?: number;
   optional?: { bp?: number | null };
 }
 

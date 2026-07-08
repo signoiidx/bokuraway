@@ -79,12 +79,15 @@ Credentials (`CLIENT_ID`, `CLIENT_SECRET`) are read from `.env` via `dotenv`.
 
 ### Nudge logic (`src/nudge.ts`)
 
-`computeNudges(pbs)` detects charts where one of the two main BMS goals — HARD CLEAR or EASY CLEAR — looks achievable but isn't achieved yet, judged by BP rate (`bp / notecount`; falls back to absolute BP when `chart.data.notecount` is missing):
+`computeNudges(pbs)` detects charts where a main BMS goal looks achievable but isn't achieved yet, on two axes:
 
-- FAILED/ASSIST → **EASY CLEAR** when BP rate ≤ 5% (abs BP ≤ 30)
-- EASY/CLEAR → **HARD CLEAR** when BP rate ≤ 3.5% (abs BP ≤ 20)
+- **Lamp goals** — judged by BP rate (`bp / notecount`; falls back to absolute BP when `chart.data.notecount` is missing):
+  - FAILED/ASSIST → **EASY CLEAR** when BP rate ≤ 5% (abs BP ≤ 30)
+  - EASY/CLEAR → **HARD CLEAR** when BP rate ≤ 3.5% (abs BP ≤ 20)
+  - Charts already at HARD CLEAR or better get no lamp nudge.
+- **Grade goals** — `scoreData.percent` (EX score rate) within 1.0 point below the next grade boundary: **A** (600/9 ≈ 66.67%), **AA** (700/9 ≈ 77.78%), **AAA** (800/9 ≈ 88.89%). Applies regardless of lamp.
 
-Charts already at HARD CLEAR or better get no nudge. Each nudge is `{ goal, reason, closeness }` (`closeness` 0–1, higher = closer); `reason` is the Japanese label rendered in the `.nudge-badge` chip. The renderer shows nudges in the 「あと一歩」tab (default tab, `data-tab="nudges"`) on the recommend page.
+Each chart gets at most one nudge — the candidate with the highest `closeness` (0–1, higher = closer). Each nudge is `{ goal, reason, closeness }`; `reason` is the Japanese label rendered in the `.nudge-badge` chip. The renderer shows nudges in the 「あと一歩」tab (default tab, `data-tab="nudges"`) on the recommend page.
 
 ## Difficulty table logic
 

@@ -435,7 +435,7 @@
         <div class="tab-bar">
           <button class="tab active" data-tab="nudges">🔔 あと一歩</button>
           <button class="tab" data-tab="toHard">HARD CLEAR 狙い</button>
-          <button class="tab" data-tab="toClear">CLEAR 狙い</button>
+          <button class="tab" data-tab="toEasy">EASY CLEAR 狙い</button>
         </div>
         <div class="score-list" id="recommend-list">
           <div class="status dot-loader">読み込み中</div>
@@ -617,8 +617,8 @@ async function loadRecommend() {
         <div class="stat-value c-hard">${recommendData.toHard.length}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">CLEAR 候補</div>
-        <div class="stat-value c-clear">${recommendData.toClear.length}</div>
+        <div class="stat-label">EASY CLEAR 候補</div>
+        <div class="stat-value c-easy">${recommendData.toEasy.length}</div>
       </div>`;
     renderRecommendList();
   } catch(e) {
@@ -632,10 +632,10 @@ function renderRecommendList() {
   const scores = recommendData[activeRecommendTab] ?? [];
   if (scores.length === 0) {
     const msg = activeRecommendTab === 'nudges'
-      ? '「あと一歩」の譜面が見つかりません。BPの少ない譜面やグレード境界に近い譜面がここに表示されます。'
+      ? '「あと一歩」の譜面が見つかりません。BP率の低い譜面がここに表示されます。'
       : activeRecommendTab === 'toHard'
-        ? 'HARD CLEAR候補がありません。CLEAR数を増やしましょう！'
-        : 'CLEAR候補がありません。';
+        ? 'HARD CLEAR候補がありません。EASY CLEAR数を増やしましょう！'
+        : 'EASY CLEAR候補がありません。';
     list.innerHTML = `<div class="status">${msg}</div>`;
     return;
   }
@@ -919,7 +919,7 @@ document.querySelectorAll('#page-tables .tab').forEach(btn => {
 window.__test = {
   setScores: (data) => { allScores = data; },
   setRecommendData: (data) => { recommendData = data; },
-  setActiveRecommendTab: (tab) => { activeRecommendTab = tab; },
+  setActiveRecommendTab: (tab) => { activeRecommendTab = tab; }, // 'nudges' | 'toHard' | 'toEasy'
   renderRecommendList,
   setTableData: (entries) => {
     tableIndex = new Map();

@@ -89,8 +89,6 @@ interface TachiChart {
 
 interface TachiScoreData {
   lamp?: string;
-  percent?: number;
-  grade?: string;
   optional?: { bp?: number | null };
 }
 
@@ -237,28 +235,33 @@ ipcMain.handle('get-scores', async (_e, userID: number) => {
   return joinedPBs(data);
 });
 
-// Returns { nudges: [...], toHard: [...], toClear: [...] } — best lamp per chart.
-// nudges = 目標達成まであと一歩の譜面 (closeness 降順)。toHard/toClear はレベル昇順。
+// Returns { nudges: [...], toHard: [...], toEasy: [...] } — best lamp per chart.
+// nudges = HARD/EASY CLEAR まであと一歩の譜面 (closeness 降順)。toHard/toEasy はレベル昇順。
 ipcMain.handle('get-recommend', async (_e, userID: number) => {
   console.log('get-recommend userID:', userID);
   let data: TachiPBsResponse;
   try {
     data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`) as TachiPBsResponse;
   } catch (e) {
-    if ((e as AxiosError).response?.status === 404) return { nudges: [], toHard: [], toClear: [], noProfile: true };
+    if ((e as AxiosError).response?.status === 404) return { nudges: [], toHard: [], toEasy: [], noProfile: true };
     throw e;
   }
 
   const best = bestPerChart(joinedPBs(data));
   const nudges = computeNudges(best);
+  // HARD CLEAR 狙い: EASY/CLEAR 済みでまだ HARD CLEAR していない譜面
   const toHard = best
-    .filter(s => (LAMP_ORDER[lampCat(s.scoreData?.lamp)] ?? -1) < LAMP_ORDER.HARD)
+    .filter(s => {
+      const o = LAMP_ORDER[lampCat(s.scoreData?.lamp)] ?? -1;
+      return o >= LAMP_ORDER.EASY && o < LAMP_ORDER.HARD;
+    })
     .sort((a, b) => getLevel(a.chart) - getLevel(b.chart));
-  const toClear = best
-    .filter(s => (LAMP_ORDER[lampCat(s.scoreData?.lamp)] ?? -1) < LAMP_ORDER.CLEAR)
+  // EASY CLEAR 狙い: まだ EASY CLEAR にも届いていない譜面 (FAILED, ASSIST)
+  const toEasy = best
+    .filter(s => (LAMP_ORDER[lampCat(s.scoreData?.lamp)] ?? -1) < LAMP_ORDER.EASY)
     .sort((a, b) => getLevel(a.chart) - getLevel(b.chart));
 
-  return { nudges, toHard, toClear };
+  return { nudges, toHard, toEasy };
 });
 
 // Returns { byLevel: { [lv]: { FC, EXHARD, HARD, CLEAR, EASY, ASSIST, FAILED } }, totals, total }

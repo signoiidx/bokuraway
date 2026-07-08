@@ -46,7 +46,7 @@ const MOCK_RECOMMEND = {
     },
   ],
   toHard: [],
-  toClear: [],
+  toEasy: [],
 };
 
 // MD5.insane13 is in the table but has no matching score → should appear as NO PLAY
@@ -284,7 +284,8 @@ describe('bokuraway e2e', async () => {
         [...document.querySelectorAll('#page-recommend .tab')].map(t => t.dataset.tab)
       );
       assert.ok(tabs.includes('nudges'), 'recommend tab "nudges" should exist');
-      assert.ok(tabs.includes('toHard'), 'recommend tab "toHard" should still exist');
+      assert.ok(tabs.includes('toHard'), 'recommend tab "toHard" should exist');
+      assert.ok(tabs.includes('toEasy'), 'recommend tab "toEasy" should exist');
     });
 
     it('renders nudge badge with the goal reason', async () => {

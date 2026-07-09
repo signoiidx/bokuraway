@@ -497,6 +497,7 @@
       <div class="page active" id="page-recommend">
         <div class="page-title">NEXT CHALLENGE</div>
         <div class="page-sub">上達のための次の一手をレコメンド</div>
+        <div class="filter-bar table-filter-bar"></div>
         <div id="recommend-stats" class="stat-grid"></div>
         <div class="tab-bar">
           <button class="tab active" data-tab="nudges">🔔 あと一歩</button>
@@ -512,6 +513,7 @@
       <div class="page" id="page-stats">
         <div class="page-title">LAMP STATS</div>
         <div class="page-sub">難易度別クリアランプ分布</div>
+        <div class="filter-bar table-filter-bar"></div>
         <div id="stats-totals" class="stat-grid"></div>
         <div id="stats-table-wrap">
           <div class="status dot-loader">読み込み中</div>
@@ -522,13 +524,8 @@
       <div class="page" id="page-tables">
         <div class="page-title">DIFFICULTY TABLES</div>
         <div class="page-sub">難易度表別スコア一覧（プレイ済みのみ）</div>
-        <div class="filter-bar" id="table-filter-bar">
-          <label class="check-chip"><input type="checkbox" data-table="insane" checked>発狂難易度</label>
-          <label class="check-chip"><input type="checkbox" data-table="satellite" checked>Satellite</label>
-          <label class="check-chip"><input type="checkbox" data-table="stella" checked>Stella</label>
-          <label class="check-chip"><input type="checkbox" data-table="overjoy" checked>Overjoy</label>
-          <label class="check-chip"><input type="checkbox" data-table="outside">表外</label>
-        </div>
+        <!-- チェックボックスは renderer.ts が tableFilter の状態から全ページ分を生成する -->
+        <div class="filter-bar table-filter-bar" id="table-filter-bar"></div>
         <input type="text" class="search-input" id="table-search" placeholder="曲名・アーティストで検索…">
         <div id="table-stats" class="stat-grid"></div>
         <div class="score-list" id="table-list">
@@ -540,6 +537,7 @@
       <div class="page" id="page-scores">
         <div class="page-title">SCORE LIST</div>
         <div class="page-sub">ベストスコア一覧</div>
+        <div class="filter-bar table-filter-bar"></div>
         <input type="text" class="search-input" id="score-search" placeholder="曲名・アーティストで検索…">
         <div class="filter-bar" id="score-filter-bar"></div>
         <div class="score-list" id="score-list">

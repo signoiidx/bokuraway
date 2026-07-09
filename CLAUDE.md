@@ -28,12 +28,12 @@ Screenshots are written to `tests/shots/` (gitignored) on each run.
 
 The app follows Electron's standard main/renderer split with context isolation:
 
-- **`src/main.ts`** — Main process. Creates the `BrowserWindow`, runs an OAuth callback server on `http://localhost:8080/callback`, and exposes six IPC handlers: `oauth-start`, `get-me`, `get-scores`, `get-recommend`, `get-stats`, `get-table-data`. All Bokutachi API calls go through `tachiGet()` using the stored `accessToken`. Difficulty table data is fetched from external JSON endpoints via `fetchBmsTable()`. PB and table responses are cached on disk (see "Local cache" below).
+- **`src/main.ts`** — Main process. Creates the `BrowserWindow`, runs an OAuth callback server on `http://localhost:8080/callback`, and exposes five IPC handlers: `oauth-start`, `get-me`, `get-scores`, `get-recommend`, `get-table-data`. All Bokutachi API calls go through `tachiGet()` using the stored `accessToken`. Difficulty table data is fetched from external JSON endpoints via `fetchBmsTable()`. PB and table responses are cached on disk (see "Local cache" below).
 - **`src/cache.ts`** — Minimal JSON disk cache (`userData/cache/<key>.json`, `{ savedAt, data }`), main-process only, with optional TTL on read.
 - **`src/nudge.ts`** — Pure module with the lamp helpers (`lampCat`, `LAMP_ORDER`) and the nudge logic (`computeNudges`). No Electron imports, so `tests/nudge.test.mjs` unit-tests the compiled `dist/nudge.js` directly without launching the app.
-- **`src/preload.ts`** — Context bridge. Exposes `window.tachi` to the renderer with seven invoke methods (`startOAuth`, `getMe`, `getScores`, `getRecommend`, `getStats`, `getTableData`, `logout`) plus `onPBsUpdated(cb)`, which subscribes to the `pbs-updated` push event. `nodeIntegration` is disabled.
-- **`src/renderer.ts`** — Renderer logic, loaded by `index.html` as `<script src="./dist/renderer.js">`. Handles the auth screen, sidebar navigation, and four pages: "レコメンド" (Recommend), "スコア一覧" (Score List), "統計" (Stats), "難易度表" (Difficulty Tables). Written as a **non-module script** (no `import`/`export`) so plain `tsc` output runs in the context-isolated renderer without a bundler; the implementation is wrapped in an IIFE and only `window.__test` is exposed.
-- **`src/types.ts`** — Shared type declarations (`TachiPB`, `DiffTableEntry`, `RecommendData`, `StatsData`, …). Also a global script with no `import`/`export`, so both the module-based `main.ts` and the non-module `renderer.ts` see the types without imports. Type-only; the emitted `dist/types.js` is unused.
+- **`src/preload.ts`** — Context bridge. Exposes `window.tachi` to the renderer with six invoke methods (`startOAuth`, `getMe`, `getScores`, `getRecommend`, `getTableData`, `logout`) plus `onPBsUpdated(cb)`, which subscribes to the `pbs-updated` push event. `nodeIntegration` is disabled.
+- **`src/renderer.ts`** — Renderer logic, loaded by `index.html` as `<script src="./dist/renderer.js">`. Handles the auth screen, sidebar navigation, and four pages: "レコメンド" (Recommend), "スコア一覧" (Score List), "統計" (Stats), "難易度表" (Difficulty Tables). The Stats page is computed renderer-side from `allScores` (`renderStats()`) so the global table filter can be applied to it. Written as a **non-module script** (no `import`/`export`) so plain `tsc` output runs in the context-isolated renderer without a bundler; the implementation is wrapped in an IIFE and only `window.__test` is exposed.
+- **`src/types.ts`** — Shared type declarations (`TachiPB`, `DiffTableEntry`, `RecommendData`, …). Also a global script with no `import`/`export`, so both the module-based `main.ts` and the non-module `renderer.ts` see the types without imports. Type-only; the emitted `dist/types.js` is unused.
 - **`index.html`** — Markup + CSS only. No framework or bundler.
 
 ### Test interface
@@ -47,11 +47,12 @@ window.__test = {
   setActiveRecommendTab(tab), // sets activeRecommendTab ('nudges' | 'toHard' | 'toEasy')
   renderRecommendList(),
   setTableData(entries),      // builds tableIndex (Map<md5, entry[]>) and sets tableDataLoaded = true
-  setTableFilter(filter),     // merges into tableFilter ({ insane, satellite, stella, overjoy, outside }) and syncs the checkboxes
+  setTableFilter(filter),     // merges into tableFilter ({ insane, satellite, stella, overjoy, outside }) and syncs the checkboxes on all pages
   setScoreSearchQuery(q),     // sets scoreSearchQuery (score list search box state)
   setTableSearchQuery(q),     // sets tableSearchQuery (table view search box state)
   renderTableView(),
   renderScoreList(),
+  renderStats(),              // renders the Stats page from allScores (table filter applied)
 }
 ```
 
@@ -75,7 +76,7 @@ Credentials (`CLIENT_ID`, `CLIENT_SECRET`) are read from `.env` via `dotenv`.
 
 To make startup fast, `main.ts` caches API responses on disk via `src/cache.ts`:
 
-- **PBs** (`get-scores` / `get-recommend` / `get-stats` all share `fetchPBs()`): if a disk cache exists it is returned immediately and a background refresh is kicked off (once per user per session, guarded by `pbsRefreshing`); when the fresh response differs, the cache is updated and `pbs-updated` is sent to the renderer, which reloads all three pages. An in-memory copy (`pbsMemo`) prevents re-fetch loops within a session.
+- **PBs** (`get-scores` / `get-recommend` share `fetchPBs()`): if a disk cache exists it is returned immediately and a background refresh is kicked off (once per user per session, guarded by `pbsRefreshing`); when the fresh response differs, the cache is updated and `pbs-updated` is sent to the renderer, which reloads the pages (Stats re-renders from the reloaded scores). An in-memory copy (`pbsMemo`) prevents re-fetch loops within a session.
 - **Difficulty tables** (`get-table-data`): cached with a 24h TTL. A fully-failed fetch (all four tables empty) is not cached, so the next launch retries.
 
 ## Recommend logic
@@ -116,7 +117,11 @@ Each table's `header.json` is fetched → resolves `data_url` → downloads the 
 
 In the renderer, `tableIndex` is `Map<md5, DiffTableEntry[]>` (a chart can appear in multiple tables). `getTableLabels(s)` returns all matching level strings joined with ` / ` (e.g. `★11 / sl7`), or `"-"` if the chart is in no table.
 
-The difficulty table view is filtered by checkboxes (`#table-filter-bar`, state in `tableFilter`): one per table plus 表外 (charts in no table). Defaults: all tables checked, 表外 unchecked. Each checked table renders as a `.table-section` (heading + level sections); checking 表外 appends a section with scores whose MD5 is in no table. Within a table, scores are grouped by level, played charts show their lamp and BP, and unplayed table entries render as dimmed NO PLAY rows. A thin progress bar in each level header shows the HARD+ rate. Stat cards count charts uniquely by MD5 across the checked tables.
+### Global table filter
+
+Every page (Recommend, Score List, Stats, Difficulty Tables) has a table filter bar: one checkbox per table plus 表外 (charts in no table). Defaults: all tables checked, 表外 unchecked. The checkboxes are generated by `renderer.ts` into each page's `.table-filter-bar` element (the tables page's bar also has `id="table-filter-bar"`); the state is the single shared `tableFilter` object, so changing a checkbox on any page syncs all bars (`syncTableFilterBars()`) and re-renders every page (`rerenderFilteredViews()`). `passesTableFilter(score)` decides visibility by MD5 lookup in `tableIndex`; before table data loads, nothing is filtered. The Recommend list/stat cards, Score List, and Stats aggregation all apply it.
+
+On the difficulty table view, each checked table renders as a `.table-section` (heading + level sections); checking 表外 appends a section with scores whose MD5 is in no table. Within a table, scores are grouped by level, played charts show their lamp and BP, and unplayed table entries render as dimmed NO PLAY rows. A thin progress bar in each level header shows the HARD+ rate. Stat cards count charts uniquely by MD5 across the checked tables.
 
 ## Search
 

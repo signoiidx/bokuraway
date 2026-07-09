@@ -604,6 +604,13 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
   resetToAuthScreen('');
 });
 
+// キャッシュ起動後のバックグラウンド更新で差分が見つかったら各ページを再読込
+window.tachi?.onPBsUpdated?.(() => {
+  if (!currentUser) return;
+  console.log('PBs updated in background — reloading pages');
+  Promise.all([loadRecommend(), loadStats(), loadScores()]);
+});
+
 // ── search ───────────────────────────────────────────────────────────────────
 // 曲名・アーティスト名の部分一致 (大文字小文字無視)。query が空なら常に true
 function matchesQuery(query, ...fields) {

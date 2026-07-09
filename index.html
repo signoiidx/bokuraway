@@ -64,6 +64,22 @@
     color: var(--muted);
     -webkit-app-region: no-drag;
   }
+  #btn-logout {
+    margin-left: 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--muted);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    transition: color .15s, border-color .15s;
+  }
+  #btn-logout:hover { color: var(--text); border-color: var(--accent2); }
 
   /* ── layout ── */
   #app { flex: 1; display: flex; overflow: hidden; }
@@ -278,6 +294,23 @@
     color: var(--muted);
   }
 
+  /* ── search input ── */
+  .search-input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 12px;
+    color: var(--text);
+    margin-bottom: 14px;
+    width: 100%;
+    max-width: 320px;
+    display: block;
+  }
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus { outline: none; border-color: var(--accent); }
+
   /* ── filter bar ── */
   .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
   .filter-btn {
@@ -385,6 +418,7 @@
 <div id="titlebar">
   <span class="logo">BOKURAWAY</span>
   <span class="user-info" id="user-chip"></span>
+  <button id="btn-logout" style="display:none">ログアウト</button>
 </div>
 
 <div id="app">
@@ -460,6 +494,7 @@
       <div class="page" id="page-scores">
         <div class="page-title">SCORE LIST</div>
         <div class="page-sub">ベストスコア一覧</div>
+        <input type="text" class="search-input" id="score-search" placeholder="曲名・アーティストで検索…">
         <div class="filter-bar" id="score-filter-bar"></div>
         <div class="score-list" id="score-list">
           <div class="status dot-loader">読み込み中</div>
@@ -481,6 +516,38 @@ let activeScoreLamp   = 'ALL';
 
 const LAMP_ORDER = { FAILED: 0, ASSIST: 1, EASY: 2, CLEAR: 3, HARD: 4, EXHARD: 5, FC: 6 };
 
+// ── security helpers ────────────────────────────────────────────────────────────
+// Song/chart metadata (titles, artists, difficulty table labels) comes from external
+// sources (Bokutachi API, third-party BMS difficulty tables) and is untrusted —
+// escape before interpolating into innerHTML to avoid XSS.
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => HTML_ESCAPES[c]);
+}
+
+function isAuthExpiredError(e) {
+  return typeof e?.message === 'string' && e.message.includes('AUTH_EXPIRED');
+}
+
+async function handleAuthExpired() {
+  try { await window.tachi.logout(); } catch (e) { /* best effort */ }
+  resetToAuthScreen('セッションの有効期限が切れました。再度ログインしてください。');
+}
+
+function resetToAuthScreen(message) {
+  currentUser = null;
+  recommendData = null;
+  allScores = null;
+  statsData = null;
+  tableIndex = new Map();
+  tableDataLoaded = false;
+  document.getElementById('user-chip').textContent = '';
+  document.getElementById('btn-logout').style.display = 'none';
+  document.getElementById('main-screen').classList.remove('active');
+  document.getElementById('auth-screen').style.display = '';
+  document.getElementById('auth-status').textContent = message || '';
+}
+
 // ── nav ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-item').forEach(el => {
   el.addEventListener('click', () => {
@@ -494,22 +561,32 @@ document.querySelectorAll('.nav-item').forEach(el => {
 
 // ── auth ─────────────────────────────────────────────────────────────────────
 document.getElementById('btn-login').addEventListener('click', async () => {
+  const btn    = document.getElementById('btn-login');
   const status = document.getElementById('auth-status');
+  btn.disabled = true;
   status.textContent = 'ブラウザを開いています…';
-  const result = await window.tachi.startOAuth();
-  if (!result.success) { status.textContent = 'エラー: ' + result.error; return; }
-  status.textContent = 'ユーザー情報を取得中…';
   try {
+    const result = await window.tachi.startOAuth();
+    if (!result.success) { status.textContent = 'エラー: ' + result.error; return; }
+    status.textContent = 'ユーザー情報を取得中…';
     const me = await window.tachi.getMe();
     currentUser = me.user ?? me;
     document.getElementById('user-chip').textContent = currentUser.username;
+    document.getElementById('btn-logout').style.display = '';
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('main-screen').classList.add('active');
     Promise.all([loadRecommend(), loadStats(), loadScores()]);
     loadTableData();
   } catch(e) {
     status.textContent = 'ユーザー情報の取得に失敗しました';
+  } finally {
+    btn.disabled = false;
   }
+});
+
+document.getElementById('btn-logout').addEventListener('click', async () => {
+  try { await window.tachi.logout(); } catch (e) { /* best effort */ }
+  resetToAuthScreen('');
 });
 
 // ── lamp helpers ──────────────────────────────────────────────────────────────
@@ -560,10 +637,10 @@ function scoreItemHTML(s, rank, lvLabel) {
     <div class="score-item">
       <div class="score-rank">${rank}</div>
       <div>
-        <div class="score-title">${title}</div>
-        ${artist ? `<div class="score-artist">${artist}</div>` : ''}
+        <div class="score-title">${escapeHtml(title)}</div>
+        ${artist ? `<div class="score-artist">${escapeHtml(artist)}</div>` : ''}
         <div class="score-meta">
-          <span class="lv-badge">${lv}</span>
+          <span class="lv-badge">${escapeHtml(lv)}</span>
           ${bp != null ? `<span class="bp-badge">BP ${bp}</span>` : ''}
         </div>
       </div>
@@ -576,8 +653,8 @@ function unchartedItemHTML(entry, rank) {
     <div class="score-item uncharted">
       <div class="score-rank">${rank}</div>
       <div>
-        <div class="score-title">${entry.title || '(no title)'}</div>
-        <div class="score-meta"><span class="lv-badge">${entry.level}</span></div>
+        <div class="score-title">${escapeHtml(entry.title || '(no title)')}</div>
+        <div class="score-meta"><span class="lv-badge">${escapeHtml(entry.level)}</span></div>
       </div>
       <div class="score-right"><span class="lamp-badge lamp-NOPLAY">NO PLAY</span></div>
     </div>`;
@@ -605,7 +682,8 @@ async function loadRecommend() {
       </div>`;
     renderRecommendList();
   } catch(e) {
-    list.innerHTML = `<div class="status">取得エラー: ${e.message}</div>`;
+    if (isAuthExpiredError(e)) { handleAuthExpired(); return; }
+    list.innerHTML = `<div class="status">取得エラー: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -685,11 +763,14 @@ async function loadStats() {
 
     wrap.innerHTML = `<table class="stats-table"><thead>${header}</thead><tbody>${rows}</tbody></table>`;
   } catch(e) {
-    wrap.innerHTML = `<div class="status">取得エラー: ${e.message}</div>`;
+    if (isAuthExpiredError(e)) { handleAuthExpired(); return; }
+    wrap.innerHTML = `<div class="status">取得エラー: ${escapeHtml(e.message)}</div>`;
   }
 }
 
 // ── scores ────────────────────────────────────────────────────────────────────
+let scoreSearchQuery = '';
+
 async function loadScores() {
   const list      = document.getElementById('score-list');
   const filterBar = document.getElementById('score-filter-bar');
@@ -732,16 +813,30 @@ async function loadScores() {
     renderScoreList();
     if (document.getElementById('page-tables').classList.contains('active')) renderTableView();
   } catch(e) {
-    list.innerHTML = `<div class="status">取得エラー: ${e.message}</div>`;
+    if (isAuthExpiredError(e)) { handleAuthExpired(); return; }
+    list.innerHTML = `<div class="status">取得エラー: ${escapeHtml(e.message)}</div>`;
   }
 }
 
+document.getElementById('score-search').addEventListener('input', (e) => {
+  scoreSearchQuery = e.target.value.trim().toLowerCase();
+  renderScoreList();
+});
+
 function renderScoreList() {
   if (!allScores) return;
-  const list     = document.getElementById('score-list');
-  const filtered = activeScoreLamp === 'ALL'
+  const list = document.getElementById('score-list');
+  let filtered = activeScoreLamp === 'ALL'
     ? allScores
     : allScores.filter(s => lampCat(s.scoreData?.lamp) === activeScoreLamp);
+
+  if (scoreSearchQuery) {
+    filtered = filtered.filter(s => {
+      const title  = (s.chart?.songTitle || '').toLowerCase();
+      const artist = (s.chart?.artist    || '').toLowerCase();
+      return title.includes(scoreSearchQuery) || artist.includes(scoreSearchQuery);
+    });
+  }
 
   if (filtered.length === 0) {
     list.innerHTML = '<div class="status">該当するスコアがありません</div>';
@@ -773,7 +868,8 @@ async function loadTableData() {
     tableDataLoaded = true;
     renderTableView();
   } catch(e) {
-    document.getElementById('table-list').innerHTML = `<div class="status">難易度表の取得に失敗: ${e.message}</div>`;
+    if (isAuthExpiredError(e)) { handleAuthExpired(); return; }
+    document.getElementById('table-list').innerHTML = `<div class="status">難易度表の取得に失敗: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -857,7 +953,7 @@ function renderTableView() {
     return `
       <div class="level-section">
         <div class="level-header">
-          <span>${symbol}${lv}</span>
+          <span>${escapeHtml(symbol)}${lv}</span>
           <div class="level-progress"><div class="level-progress-fill" style="width:${hardPct}%"></div></div>
           <span class="level-count">${played.length} / ${total}曲</span>
         </div>

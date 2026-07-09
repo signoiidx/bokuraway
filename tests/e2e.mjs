@@ -529,7 +529,7 @@ describe('bokuraway e2e', async () => {
   describe('global table filter (all pages)', () => {
     before(() => injectMockAndRender(page, DEFAULT_FILTER));
 
-    it('renders a filter bar with 5 checkboxes on every page', async () => {
+    it('renders a filter bar with 5 checkboxes on the filtered pages', async () => {
       const counts = await page.evaluate(() =>
         [...document.querySelectorAll('.page')].map(p => [
           p.id,
@@ -538,7 +538,8 @@ describe('bokuraway e2e', async () => {
       );
       assert.equal(counts.length, 4, 'all four pages should be checked');
       for (const [id, n] of counts) {
-        assert.equal(n, 5, `${id} should have 5 table filter checkboxes`);
+        // ランプ統計ページはフィルタバーの代わりに難易度表タブを持つ
+        assert.equal(n, id === 'page-stats' ? 0 : 5, `${id} table filter checkbox count`);
       }
     });
 
@@ -613,43 +614,74 @@ describe('bokuraway e2e', async () => {
       assert.ok(restored.includes('発狂曲A'), 'nudges should reappear when insane is re-checked');
     });
 
-    it('lamp stats totals respect the table filter', async () => {
-      const readTotals = () => page.evaluate(() =>
-        Object.fromEntries(
-          [...document.querySelectorAll('#stats-totals .stat-card')].map(c => [
-            c.querySelector('.stat-label')?.textContent.trim(),
-            c.querySelector('.stat-value')?.textContent.trim(),
-          ])
-        )
-      );
+  });
 
-      // 発狂曲A(HARD) + 発狂曲B(CLEAR) + サテ曲C(EASY) = 3 (表外の未登録曲は除外)
-      await page.evaluate((filter) => {
-        window.__test.setTableFilter(filter);
+  // ── lamp stats (per-table tabs) ───────────────────────────────────────────────
+
+  describe('lamp stats page', () => {
+    before(() => injectMockAndRender(page, DEFAULT_FILTER));
+
+    const readTotals = () => page.evaluate(() =>
+      Object.fromEntries(
+        [...document.querySelectorAll('#stats-totals .stat-card')].map(c => [
+          c.querySelector('.stat-label')?.textContent.trim(),
+          c.querySelector('.stat-value')?.textContent.trim(),
+        ])
+      )
+    );
+    const readRows = () => page.evaluate(() =>
+      [...document.querySelectorAll('#stats-table-wrap tbody tr')].map(tr =>
+        [...tr.querySelectorAll('td')].map(td => td.textContent.trim())
+      )
+    );
+
+    it('shows a per-level lamp table for the insane table by default', async () => {
+      await page.evaluate(() => {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.getElementById('page-stats').classList.add('active');
+        window.__test.setActiveStatsTable('insane');
         window.__test.renderStats();
-      }, DEFAULT_FILTER);
-      let totals = await readTotals();
-      assert.equal(totals['総譜面数'], '3', '表外 chart should be excluded by default');
+      });
+      await page.waitForTimeout(100);
+
+      // 発狂: 発狂曲A(★11 HARD) + 発狂曲B(★12 CLEAR) + 未挑戦曲(★13 NO PLAY)。表外・サテ曲は含まない
+      const totals = await readTotals();
+      assert.equal(totals['総譜面数'], '3', 'insane table has 3 charts');
       assert.equal(totals['HARD以上'], '1', 'HARD以上 should count 発狂曲A only');
+      assert.equal(totals['未プレイ'], '1', '未挑戦曲 should count as unplayed');
 
-      await page.evaluate((filter) => {
-        window.__test.setTableFilter(filter);
-        window.__test.renderStats();
-      }, { insane: true, satellite: false, stella: false, overjoy: false, outside: false });
-      totals = await readTotals();
-      assert.equal(totals['総譜面数'], '2', 'satellite chart should be excluded when unchecked');
+      // 列: Level, FC, EX HARD, HARD, CLEAR, EASY, ASSIST, FAILED, NO PLAY, Total
+      const rows = await readRows();
+      assert.deepEqual(rows, [
+        ['★11', '–', '–', '1', '–', '–', '–', '–', '–', '1'],
+        ['★12', '–', '–', '–', '1', '–', '–', '–', '–', '1'],
+        ['★13', '–', '–', '–', '–', '–', '–', '–', '1', '1'],
+      ], 'each level row should classify charts by lamp');
+      await page.screenshot({ path: path.join(SHOT_DIR, '10-stats-insane.png') });
+    });
 
-      await page.evaluate((filter) => {
-        window.__test.setTableFilter(filter);
-        window.__test.renderStats();
-      }, { ...DEFAULT_FILTER, outside: true });
-      totals = await readTotals();
-      assert.equal(totals['総譜面数'], '4', '表外 ON で未登録曲も数える');
-      await page.screenshot({ path: path.join(SHOT_DIR, '10-stats-filter.png') });
+    it('tabs switch the stats to another difficulty table', async () => {
+      await page.click('#stats-tab-bar .tab[data-table="satellite"]');
+      await page.waitForTimeout(100);
 
-      await page.evaluate((filter) => window.__test.setTableFilter(filter), DEFAULT_FILTER);
+      const totals = await readTotals();
+      assert.equal(totals['総譜面数'], '1', 'satellite table has 1 chart');
+      assert.equal(totals['EASY以上'], '1', 'サテ曲C is EASY CLEAR');
+      const rows = await readRows();
+      assert.deepEqual(rows, [
+        ['sl5', '–', '–', '–', '–', '1', '–', '–', '–', '1'],
+      ], 'satellite tab should show sl levels only');
+      await page.screenshot({ path: path.join(SHOT_DIR, '11-stats-satellite.png') });
+    });
+
+    it('a table with no entries shows an empty message', async () => {
+      await page.click('#stats-tab-bar .tab[data-table="stella"]');
+      await page.waitForTimeout(100);
+      const text = await page.evaluate(() => document.getElementById('stats-table-wrap')?.innerText ?? '');
+      assert.ok(text.includes('この難易度表のデータがありません'), 'stella has no mock entries');
+
+      await page.click('#stats-tab-bar .tab[data-table="insane"]');
+      await page.waitForTimeout(100);
     });
   });
 });

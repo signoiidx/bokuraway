@@ -33,7 +33,7 @@ interface TestAPI {
   setActiveRecommendTab(tab: string): void;
   renderRecommendList(): void;
   setTableData(entries: DiffTableEntry[]): void;
-  setActiveTableTab(tab: string): void;
+  setTableFilter(filter: Record<string, boolean>): void;
   setScoreSearchQuery(q: string): void;
   setTableSearchQuery(q: string): void;
   renderTableView(): void;
@@ -424,7 +424,15 @@ function renderScoreList(): void {
 }
 
 // ── difficulty tables ─────────────────────────────────────────────────────────
-let activeTableTab = 'insane';
+const TABLE_ORDER = ['insane', 'satellite', 'stella', 'overjoy'] as const;
+const TABLE_LABEL: Record<string, string> = {
+  insane: '発狂難易度', satellite: 'Satellite', stella: 'Stella', overjoy: 'Overjoy',
+};
+// 表示フィルタ。キーは各テーブルID + 'outside' (どの表にも載っていない譜面 = 表外)。
+// 初期値は index.html のチェックボックスの checked 属性と一致させること
+const tableFilter: Record<string, boolean> = {
+  insane: true, satellite: true, stella: true, overjoy: true, outside: false,
+};
 // md5 → DiffTableEntry[]  (1曲が複数テーブルに載ることがあるため配列)
 let tableIndex = new Map<string, DiffTableEntry[]>();
 let tableDataLoaded = false;
@@ -451,63 +459,10 @@ async function loadTableData(): Promise<void> {
   }
 }
 
-function renderTableView(): void {
-  const listEl  = el('table-list');
-  const statsEl = el('table-stats');
+type PlayedRow = { s: TachiPB; entry: DiffTableEntry };
 
-  if (!allScores || !tableDataLoaded) {
-    listEl.innerHTML  = '<div class="status dot-loader">読み込み中</div>';
-    statsEl.innerHTML = '';
-    return;
-  }
-
-  // Match played scores against the active table.
-  // 検索クエリはプレイ済み・未プレイの両方に適用する (レベルグルーピングは維持)
-  const matchesSearch = (s: TachiPB) => matchesQuery(tableSearchQuery, s.chart?.songTitle, s.chart?.artist);
-  const mapped = allScores.filter(matchesSearch).map(s => {
-    const allEntries = tableIndex.get((s.chart?.data?.hashMD5 || '').toLowerCase()) ?? [];
-    return { s, entry: allEntries.find(e => e.table === activeTableTab) ?? null };
-  });
-  type PlayedRow = { s: TachiPB; entry: DiffTableEntry };
-  const tableScores     = mapped.filter((m): m is PlayedRow => m.entry !== null);
-  const unmatchedScores = mapped.filter(({ entry }) => entry === null);
-
-  // Find table entries that have no matching played score (未挑戦)
-  const playedMD5s = new Set(
-    allScores.map(s => (s.chart?.data?.hashMD5 || '').toLowerCase()).filter(Boolean)
-  );
-  const unplayedEntries: DiffTableEntry[] = [];
-  for (const [md5, entries] of tableIndex) {
-    const entry = entries.find(e => e.table === activeTableTab);
-    if (entry && !playedMD5s.has(md5) && matchesQuery(tableSearchQuery, entry.title)) {
-      unplayedEntries.push(entry);
-    }
-  }
-
-  const counts: Record<LampCategory, number> = { FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 };
-  for (const { s } of tableScores) counts[lampCat(s.scoreData?.lamp)]++;
-  const hardPlus  = counts.HARD + counts.EXHARD + counts.FC;
-  const clearPlus = counts.CLEAR + hardPlus;
-
-  const statCards: [string, number, string][] = [
-    ['テーブル総数', tableScores.length + unplayedEntries.length, ''],
-    ['HARD以上',    hardPlus,                                     'c-hard'],
-    ['CLEAR以上',   clearPlus,                                    'c-clear'],
-    ['未挑戦',      unplayedEntries.length,                       ''],
-  ];
-  statsEl.innerHTML = statCards.map(([label, val, cls]) => `
-    <div class="stat-card">
-      <div class="stat-label">${label}</div>
-      <div class="stat-value ${cls}">${val}</div>
-    </div>`).join('');
-
-  if (tableScores.length === 0 && unplayedEntries.length === 0) {
-    listEl.innerHTML = tableSearchQuery
-      ? '<div class="status">検索に一致する譜面がありません</div>'
-      : '<div class="status">このテーブルのスコアがありません</div>';
-    return;
-  }
-
+// 1テーブル分 (見出し + レベル別セクション群) の HTML を組み立てる
+function tableSectionsHTML(table: string, tableScores: PlayedRow[], unplayedEntries: DiffTableEntry[]): string {
   // Group played and unplayed by level
   const byLevel: Record<number, { played: PlayedRow[]; unplayed: DiffTableEntry[] }> = {};
   for (const row of tableScores) {
@@ -523,7 +478,7 @@ function renderTableView(): void {
 
   const levels = Object.keys(byLevel).map(Number).sort((a, b) => a - b);
 
-  const sortedSections = levels.map(lv => {
+  const sections = levels.map(lv => {
     const { played, unplayed } = byLevel[lv];
     const total     = played.length + unplayed.length;
     const hardCount = played.filter(({ s }) => ['HARD', 'EXHARD', 'FC'].includes(lampCat(s.scoreData?.lamp))).length;
@@ -550,30 +505,119 @@ function renderTableView(): void {
       </div>`;
   });
 
-  if (unmatchedScores.length > 0) {
-    const sortedUnmatched = unmatchedScores.slice().sort((a, b) => {
-      const la = LAMP_ORDER[lampCat(a.s.scoreData?.lamp)] ?? -1;
-      const lb = LAMP_ORDER[lampCat(b.s.scoreData?.lamp)] ?? -1;
-      return lb - la;
-    });
-    sortedSections.push(`
-      <div class="level-section">
-        <div class="level-header">
-          <span>-</span>
-          <span class="level-count">${sortedUnmatched.length}曲</span>
-        </div>
-        <div class="score-list">${sortedUnmatched.map(({ s }, i) => scoreItemHTML(s, i + 1, '-')).join('')}</div>
-      </div>`);
-  }
-
-  listEl.innerHTML = sortedSections.join('');
+  return `
+    <div class="table-section">
+      <div class="table-section-title">${escapeHtml(TABLE_LABEL[table] ?? table)}</div>
+      ${sections.join('')}
+    </div>`;
 }
 
-document.querySelectorAll<HTMLElement>('#page-tables .tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#page-tables .tab').forEach(t => t.classList.remove('active'));
-    btn.classList.add('active');
-    activeTableTab = btn.dataset.table!;
+function renderTableView(): void {
+  const listEl  = el('table-list');
+  const statsEl = el('table-stats');
+
+  if (!allScores || !tableDataLoaded) {
+    listEl.innerHTML  = '<div class="status dot-loader">読み込み中</div>';
+    statsEl.innerHTML = '';
+    return;
+  }
+
+  // 検索クエリはプレイ済み・未プレイの両方に適用する (レベルグルーピングは維持)
+  const matchesSearch = (s: TachiPB) => matchesQuery(tableSearchQuery, s.chart?.songTitle, s.chart?.artist);
+  const searchedScores = allScores.filter(matchesSearch);
+  const playedMD5s = new Set(
+    allScores.map(s => (s.chart?.data?.hashMD5 || '').toLowerCase()).filter(Boolean)
+  );
+
+  // 統計はチェック中のテーブル全体で譜面 (md5) 単位にユニーク化して数える
+  // (1曲が複数テーブルに載っていても1回だけカウント)
+  const statPlayed   = new Map<string, TachiPB>();
+  const statUnplayed = new Set<string>();
+  const sections: string[] = [];
+
+  for (const table of TABLE_ORDER) {
+    if (!tableFilter[table]) continue;
+
+    const tableScores: PlayedRow[] = [];
+    for (const s of searchedScores) {
+      const md5 = (s.chart?.data?.hashMD5 || '').toLowerCase();
+      const entry = (tableIndex.get(md5) ?? []).find(e => e.table === table);
+      if (entry) {
+        tableScores.push({ s, entry });
+        statPlayed.set(md5, s);
+      }
+    }
+
+    // Find table entries that have no matching played score (未挑戦)
+    const unplayedEntries: DiffTableEntry[] = [];
+    for (const [md5, entries] of tableIndex) {
+      const entry = entries.find(e => e.table === table);
+      if (entry && !playedMD5s.has(md5) && matchesQuery(tableSearchQuery, entry.title)) {
+        unplayedEntries.push(entry);
+        statUnplayed.add(md5);
+      }
+    }
+
+    if (tableScores.length === 0 && unplayedEntries.length === 0) continue;
+    sections.push(tableSectionsHTML(table, tableScores, unplayedEntries));
+  }
+
+  // 表外: どのテーブルにも載っていない譜面 (チェック時のみ表示)
+  if (tableFilter.outside) {
+    const outsideScores = searchedScores.filter(s => {
+      const md5 = (s.chart?.data?.hashMD5 || '').toLowerCase();
+      return !md5 || !tableIndex.has(md5);
+    });
+    if (outsideScores.length > 0) {
+      const sorted = outsideScores.slice().sort((a, b) => {
+        const la = LAMP_ORDER[lampCat(a.scoreData?.lamp)] ?? -1;
+        const lb = LAMP_ORDER[lampCat(b.scoreData?.lamp)] ?? -1;
+        return lb - la;
+      });
+      sections.push(`
+        <div class="table-section">
+          <div class="table-section-title">表外</div>
+          <div class="level-section">
+            <div class="level-header">
+              <span>-</span>
+              <span class="level-count">${sorted.length}曲</span>
+            </div>
+            <div class="score-list">${sorted.map((s, i) => scoreItemHTML(s, i + 1, '-')).join('')}</div>
+          </div>
+        </div>`);
+    }
+  }
+
+  const counts: Record<LampCategory, number> = { FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 };
+  for (const s of statPlayed.values()) counts[lampCat(s.scoreData?.lamp)]++;
+  const hardPlus  = counts.HARD + counts.EXHARD + counts.FC;
+  const clearPlus = counts.CLEAR + hardPlus;
+
+  const statCards: [string, number, string][] = [
+    ['テーブル総数', statPlayed.size + statUnplayed.size, ''],
+    ['HARD以上',    hardPlus,                             'c-hard'],
+    ['CLEAR以上',   clearPlus,                            'c-clear'],
+    ['未挑戦',      statUnplayed.size,                    ''],
+  ];
+  statsEl.innerHTML = statCards.map(([label, val, cls]) => `
+    <div class="stat-card">
+      <div class="stat-label">${label}</div>
+      <div class="stat-value ${cls}">${val}</div>
+    </div>`).join('');
+
+  if (sections.length === 0) {
+    listEl.innerHTML = tableSearchQuery
+      ? '<div class="status">検索に一致する譜面がありません</div>'
+      : '<div class="status">表示できる譜面がありません。フィルタを確認してください。</div>';
+    return;
+  }
+
+  listEl.innerHTML = sections.join('');
+}
+
+document.querySelectorAll<HTMLInputElement>('#table-filter-bar input[type="checkbox"]').forEach(cb => {
+  cb.addEventListener('change', () => {
+    tableFilter[cb.dataset.table!] = cb.checked;
     renderTableView();
   });
 });
@@ -593,7 +637,13 @@ window.__test = {
     }
     tableDataLoaded = true;
   },
-  setActiveTableTab: (tab) => { activeTableTab = tab; },
+  setTableFilter: (filter) => {
+    Object.assign(tableFilter, filter);
+    // チェックボックス表示も内部状態に同期させる
+    document.querySelectorAll<HTMLInputElement>('#table-filter-bar input[type="checkbox"]').forEach(cb => {
+      cb.checked = !!tableFilter[cb.dataset.table!];
+    });
+  },
   setScoreSearchQuery: (q) => { scoreSearchQuery = q; },
   setTableSearchQuery: (q) => { tableSearchQuery = q; },
   renderTableView,

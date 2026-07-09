@@ -340,6 +340,38 @@
   .filter-btn:hover { color: var(--text); border-color: var(--accent); }
   .filter-btn.active { color: #fff; background: var(--accent); border-color: var(--accent); }
 
+  /* ── table filter checkboxes ── */
+  .check-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+    transition: all .15s;
+  }
+  .check-chip:hover { color: var(--text); border-color: var(--accent); }
+  .check-chip:has(input:checked) { color: var(--text); border-color: var(--accent); background: rgba(124,106,255,.10); }
+  .check-chip input { accent-color: var(--accent); margin: 0; cursor: pointer; }
+
+  /* ── table section ── */
+  .table-section-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin: 20px 0 6px;
+    text-transform: uppercase;
+  }
+  .table-section:first-child .table-section-title { margin-top: 0; }
+
   /* ── stats table ── */
   .stats-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .stats-table th {
@@ -490,11 +522,12 @@
       <div class="page" id="page-tables">
         <div class="page-title">DIFFICULTY TABLES</div>
         <div class="page-sub">難易度表別スコア一覧（プレイ済みのみ）</div>
-        <div class="tab-bar" id="table-tab-bar">
-          <button class="tab active" data-table="insane">発狂難易度</button>
-          <button class="tab" data-table="satellite">Satellite</button>
-          <button class="tab" data-table="stella">Stella</button>
-          <button class="tab" data-table="overjoy">Overjoy</button>
+        <div class="filter-bar" id="table-filter-bar">
+          <label class="check-chip"><input type="checkbox" data-table="insane" checked>発狂難易度</label>
+          <label class="check-chip"><input type="checkbox" data-table="satellite" checked>Satellite</label>
+          <label class="check-chip"><input type="checkbox" data-table="stella" checked>Stella</label>
+          <label class="check-chip"><input type="checkbox" data-table="overjoy" checked>Overjoy</label>
+          <label class="check-chip"><input type="checkbox" data-table="outside">表外</label>
         </div>
         <input type="text" class="search-input" id="table-search" placeholder="曲名・アーティストで検索…">
         <div id="table-stats" class="stat-grid"></div>

@@ -47,7 +47,7 @@ window.__test = {
   setActiveRecommendTab(tab), // sets activeRecommendTab ('nudges' | 'toHard' | 'toEasy')
   renderRecommendList(),
   setTableData(entries),      // builds tableIndex (Map<md5, entry[]>) and sets tableDataLoaded = true
-  setActiveTableTab(tab),     // sets activeTableTab
+  setTableFilter(filter),     // merges into tableFilter ({ insane, satellite, stella, overjoy, outside }) and syncs the checkboxes
   setScoreSearchQuery(q),     // sets scoreSearchQuery (score list search box state)
   setTableSearchQuery(q),     // sets tableSearchQuery (table view search box state)
   renderTableView(),
@@ -116,7 +116,7 @@ Each table's `header.json` is fetched → resolves `data_url` → downloads the 
 
 In the renderer, `tableIndex` is `Map<md5, DiffTableEntry[]>` (a chart can appear in multiple tables). `getTableLabels(s)` returns all matching level strings joined with ` / ` (e.g. `★11 / sl7`), or `"-"` if the chart is in no table.
 
-The difficulty table view groups scores by level, shows played charts with their lamp and BP, and renders unplayed table entries as dimmed NO PLAY rows. A thin progress bar in each level header shows the HARD+ rate.
+The difficulty table view is filtered by checkboxes (`#table-filter-bar`, state in `tableFilter`): one per table plus 表外 (charts in no table). Defaults: all tables checked, 表外 unchecked. Each checked table renders as a `.table-section` (heading + level sections); checking 表外 appends a section with scores whose MD5 is in no table. Within a table, scores are grouped by level, played charts show their lamp and BP, and unplayed table entries render as dimmed NO PLAY rows. A thin progress bar in each level header shows the HARD+ rate. Stat cards count charts uniquely by MD5 across the checked tables.
 
 ## Search
 

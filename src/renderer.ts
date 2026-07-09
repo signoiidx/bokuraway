@@ -37,6 +37,7 @@ interface TestAPI {
   setTableSearchQuery(q: string): void;
   renderTableView(): void;
   renderScoreList(): void;
+  setActiveStatsTable(table: string): void;
   renderStats(): void;
 }
 
@@ -54,6 +55,7 @@ let recommendData: RecommendData | null = null;
 let allScores: TachiPB[] | null = null;
 let activeRecommendTab: RecommendTab = 'nudges';
 let activeScoreLamp = 'ALL';
+let activeStatsTable = 'insane';
 let scoreSearchQuery = '';
 let tableSearchQuery = '';
 
@@ -297,33 +299,58 @@ document.querySelectorAll<HTMLElement>('#page-recommend .tab').forEach(btn => {
 });
 
 // ── stats ─────────────────────────────────────────────────────────────────────
-// ランプ統計はテーブルフィルタを適用するため、レンダラー側で allScores から集計する
+// ランプ統計は難易度表ごとのタブ (#stats-tab-bar, activeStatsTable) に分かれる。
+// 選択中テーブルの全エントリをレベル別に分類し、プレイ済み譜面はベストランプ、
+// 未プレイのエントリは NO PLAY として数える (Tachi の levelNum ではなく表の levelNum を使う)
+type StatsCol = LampCategory | 'NOPLAY';
+
 function renderStats(): void {
-  if (!allScores) return;
   const wrap     = el('stats-table-wrap');
   const totalsEl = el('stats-totals');
-  const scores   = allScores.filter(passesTableFilter);
 
-  const emptyRow = (): Record<LampCategory, number> => ({ FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 });
-  const byLevel: Record<number, Record<LampCategory, number>> = {};
+  if (!allScores || !tableDataLoaded) {
+    totalsEl.innerHTML = '';
+    wrap.innerHTML = '<div class="status dot-loader">読み込み中</div>';
+    return;
+  }
+
+  // md5 → ベストスコア (allScores は chartID 単位のベストなので md5 単位にもユニーク化)
+  const bestByMD5 = new Map<string, TachiPB>();
+  for (const s of allScores) {
+    const md5 = (s.chart?.data?.hashMD5 || '').toLowerCase();
+    if (!md5) continue;
+    const prev = bestByMD5.get(md5);
+    const curr = LAMP_ORDER[lampCat(s.scoreData?.lamp)] ?? -1;
+    if (!prev || curr > (LAMP_ORDER[lampCat(prev.scoreData?.lamp)] ?? -1)) bestByMD5.set(md5, s);
+  }
+
+  const emptyRow = (): Record<StatsCol, number> =>
+    ({ FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0, NOPLAY: 0 });
+  const byLevel = new Map<number, { symbol: string; row: Record<StatsCol, number> }>();
   const totals = emptyRow();
-  for (const s of scores) {
-    const cat = lampCat(s.scoreData?.lamp);
-    const lv  = getLevel(s.chart);
-    if (!byLevel[lv]) byLevel[lv] = emptyRow();
-    byLevel[lv][cat]++;
+
+  for (const [md5, entries] of tableIndex) {
+    const entry = entries.find(e => e.table === activeStatsTable);
+    if (!entry) continue;
+    const lv = entry.levelNum;
+    if (!byLevel.has(lv)) byLevel.set(lv, { symbol: entry.level.replace(/[\d.]+$/, ''), row: emptyRow() });
+    const best = bestByMD5.get(md5);
+    const cat: StatsCol = best ? lampCat(best.scoreData?.lamp) : 'NOPLAY';
+    byLevel.get(lv)!.row[cat]++;
     totals[cat]++;
   }
 
+  const totalCharts = Object.values(totals).reduce((a, b) => a + b, 0);
   const hardPlus  = totals.HARD + totals.EXHARD + totals.FC;
   const clearPlus = totals.CLEAR + hardPlus;
 
   const cards: [string, number, string][] = [
-    ['総譜面数',   scores.length,              ''],
+    ['総譜面数',   totalCharts,                ''],
     ['FC',         totals.FC + totals.EXHARD,  'c-fc'],
     ['HARD以上',   hardPlus,                   'c-hard'],
     ['CLEAR以上',  clearPlus,                  'c-clear'],
     ['EASY以上',   clearPlus + totals.EASY,    'c-easy'],
+    ['未プレイ',   totals.NOPLAY,              ''],
   ];
   totalsEl.innerHTML = cards.map(([label, val, cls]) => `
     <div class="stat-card">
@@ -331,14 +358,13 @@ function renderStats(): void {
       <div class="stat-value ${cls}">${val}</div>
     </div>`).join('');
 
-  const levels = Object.keys(byLevel)
-    .map(Number).filter(n => !isNaN(n))
-    .sort((a, b) => a - b);
+  if (byLevel.size === 0) {
+    wrap.innerHTML = '<div class="status">この難易度表のデータがありません</div>';
+    return;
+  }
 
-  if (levels.length === 0) { wrap.innerHTML = '<div class="status">データがありません</div>'; return; }
-
-  const COLS: LampCategory[] = ['FC', 'EXHARD', 'HARD', 'CLEAR', 'EASY', 'ASSIST', 'FAILED'];
-  const HEAD_LABEL: Record<LampCategory, string> = { FC: 'FC', EXHARD: 'EX HARD', HARD: 'HARD', CLEAR: 'CLEAR', EASY: 'EASY', ASSIST: 'ASSIST', FAILED: 'FAILED' };
+  const COLS: StatsCol[] = ['FC', 'EXHARD', 'HARD', 'CLEAR', 'EASY', 'ASSIST', 'FAILED', 'NOPLAY'];
+  const HEAD_LABEL: Record<StatsCol, string> = { FC: 'FC', EXHARD: 'EX HARD', HARD: 'HARD', CLEAR: 'CLEAR', EASY: 'EASY', ASSIST: 'ASSIST', FAILED: 'FAILED', NOPLAY: 'NO PLAY' };
 
   const header = `<tr>
     <th>Level</th>
@@ -346,11 +372,12 @@ function renderStats(): void {
     <th>Total</th>
   </tr>`;
 
+  const levels = [...byLevel.keys()].sort((a, b) => a - b);
   const rows = levels.map(lv => {
-    const row = byLevel[lv];
+    const { symbol, row } = byLevel.get(lv)!;
     const rowTotal = COLS.reduce((sum, c) => sum + row[c], 0);
     return `<tr>
-      <td>☆${lv}</td>
+      <td>${escapeHtml(symbol)}${lv}</td>
       ${COLS.map(c => {
         const n = row[c];
         return `<td class="${n > 0 ? 'cell-' + c.toLowerCase() : ''}">${n > 0 ? n : '–'}</td>`;
@@ -361,6 +388,19 @@ function renderStats(): void {
 
   wrap.innerHTML = `<table class="stats-table"><thead>${header}</thead><tbody>${rows}</tbody></table>`;
 }
+
+function setActiveStatsTable(table: string): void {
+  activeStatsTable = table;
+  document.querySelectorAll<HTMLElement>('#stats-tab-bar .tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.table === table));
+}
+
+document.querySelectorAll<HTMLElement>('#stats-tab-bar .tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    setActiveStatsTable(btn.dataset.table!);
+    renderStats();
+  });
+});
 
 // ── scores ────────────────────────────────────────────────────────────────────
 async function loadScores(): Promise<void> {
@@ -464,7 +504,8 @@ function passesTableFilter(s: TachiPB): boolean {
   return entries.some(e => tableFilter[e.table]);
 }
 
-// テーブルフィルタの影響を受ける全ページを再描画する
+// テーブルフィルタや難易度表データの影響を受ける全ページを再描画する
+// (ランプ統計はフィルタ非依存だが tableIndex に依存するためここで再描画する)
 function rerenderFilteredViews(): void {
   renderRecommendStats();
   renderRecommendList();
@@ -701,6 +742,7 @@ window.__test = {
   setTableSearchQuery: (q) => { tableSearchQuery = q; },
   renderTableView,
   renderScoreList,
+  setActiveStatsTable,
   renderStats,
 };
 

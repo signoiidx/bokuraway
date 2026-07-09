@@ -406,6 +406,7 @@
   .cell-easy   { color: var(--c-easy)   !important; }
   .cell-assist { color: var(--c-assist) !important; }
   .cell-failed { color: var(--c-failed) !important; }
+  .cell-noplay { color: var(--muted)    !important; }
 
   /* ── level section ── */
   .level-section { margin-bottom: 24px; }
@@ -512,8 +513,13 @@
       <!-- ランプ統計ページ -->
       <div class="page" id="page-stats">
         <div class="page-title">LAMP STATS</div>
-        <div class="page-sub">難易度別クリアランプ分布</div>
-        <div class="filter-bar table-filter-bar"></div>
+        <div class="page-sub">難易度表ごとのレベル別クリアランプ分布</div>
+        <div class="tab-bar" id="stats-tab-bar">
+          <button class="tab active" data-table="insane">発狂難易度</button>
+          <button class="tab" data-table="satellite">Satellite</button>
+          <button class="tab" data-table="stella">Stella</button>
+          <button class="tab" data-table="overjoy">Overjoy</button>
+        </div>
         <div id="stats-totals" class="stat-grid"></div>
         <div id="stats-table-wrap">
           <div class="status dot-loader">読み込み中</div>

@@ -31,11 +31,13 @@ The app follows Electron's standard main/renderer split with context isolation:
 - **`src/main.ts`** — Main process. Creates the `BrowserWindow`, runs an OAuth callback server on `http://localhost:8080/callback`, and exposes six IPC handlers: `oauth-start`, `get-me`, `get-scores`, `get-recommend`, `get-stats`, `get-table-data`. All Bokutachi API calls go through `tachiGet()` using the stored `accessToken`. Difficulty table data is fetched from external JSON endpoints via `fetchBmsTable()`.
 - **`src/nudge.ts`** — Pure module with the lamp helpers (`lampCat`, `LAMP_ORDER`) and the nudge logic (`computeNudges`). No Electron imports, so `tests/nudge.test.mjs` unit-tests the compiled `dist/nudge.js` directly without launching the app.
 - **`src/preload.ts`** — Context bridge. Exposes `window.tachi` to the renderer with six methods: `startOAuth`, `getMe`, `getScores`, `getRecommend`, `getStats`, `getTableData`. `nodeIntegration` is disabled.
-- **`index.html`** — Single-file renderer (HTML + CSS + JS). Handles the auth screen, sidebar navigation, and four pages: "レコメンド" (Recommend), "スコア一覧" (Score List), "統計" (Stats), "難易度表" (Difficulty Tables). No framework or bundler.
+- **`src/renderer.ts`** — Renderer logic, loaded by `index.html` as `<script src="./dist/renderer.js">`. Handles the auth screen, sidebar navigation, and four pages: "レコメンド" (Recommend), "スコア一覧" (Score List), "統計" (Stats), "難易度表" (Difficulty Tables). Written as a **non-module script** (no `import`/`export`) so plain `tsc` output runs in the context-isolated renderer without a bundler; the implementation is wrapped in an IIFE and only `window.__test` is exposed.
+- **`src/types.ts`** — Shared type declarations (`TachiPB`, `DiffTableEntry`, `RecommendData`, `StatsData`, …). Also a global script with no `import`/`export`, so both the module-based `main.ts` and the non-module `renderer.ts` see the types without imports. Type-only; the emitted `dist/types.js` is unused.
+- **`index.html`** — Markup + CSS only. No framework or bundler.
 
 ### Test interface
 
-`index.html` exposes `window.__test` at the bottom of its `<script>` block for use by `tests/e2e.mjs`. It is never called during normal app flow:
+`src/renderer.ts` exposes `window.__test` at the bottom of its IIFE for use by `tests/e2e.mjs`. It is never called during normal app flow:
 
 ```js
 window.__test = {

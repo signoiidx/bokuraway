@@ -68,10 +68,3 @@ interface RecommendData {
   toEasy: TachiPB[];
   noProfile?: boolean;
 }
-
-// get-stats の戻り値
-interface StatsData {
-  byLevel: Record<number, Record<LampCategory, number>>;
-  totals: Record<LampCategory, number>;
-  total: number;
-}

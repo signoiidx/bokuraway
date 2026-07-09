@@ -4,7 +4,7 @@ import fs from 'fs';
 import http from 'http';
 import path from 'path';
 import axios, { AxiosError } from 'axios';
-import { LampCat, LAMP_ORDER, lampCat, computeNudges } from './nudge';
+import { LAMP_ORDER, lampCat, computeNudges } from './nudge';
 import { readCache, writeCache } from './cache';
 
 console.log('CLIENT_ID:', process.env.CLIENT_ID);
@@ -354,33 +354,6 @@ ipcMain.handle('get-recommend', async (_e, userID: number) => {
     .sort((a, b) => getLevel(a.chart) - getLevel(b.chart));
 
   return { nudges, toHard, toEasy };
-});
-
-// Returns { byLevel: { [lv]: { FC, EXHARD, HARD, CLEAR, EASY, ASSIST, FAILED } }, totals, total }
-ipcMain.handle('get-stats', async (_e, userID: number) => {
-  let data: TachiPBsResponse;
-  try {
-    data = await fetchPBs(userID);
-  } catch (e) {
-    if ((e as AxiosError).response?.status === 404) {
-      return { byLevel: {}, totals: { FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 }, total: 0 };
-    }
-    throw e;
-  }
-
-  const empty = (): Record<LampCat, number> => ({ FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 });
-  const byLevel: Record<number, Record<LampCat, number>> = {};
-  const totals = empty();
-
-  for (const s of joinedPBs(data)) {
-    const cat = lampCat(s.scoreData?.lamp);
-    const lv = getLevel(s.chart);
-    if (!byLevel[lv]) byLevel[lv] = empty();
-    byLevel[lv][cat]++;
-    totals[cat]++;
-  }
-
-  return { byLevel, totals, total: (data.pbs ?? []).length };
 });
 
 const TABLE_CACHE_KEY = 'diff-tables';

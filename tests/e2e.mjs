@@ -330,7 +330,10 @@ describe('bokuraway e2e', async () => {
       await page.waitForTimeout(150);
       const text = await page.evaluate(() => document.getElementById('score-list').innerText);
       assert.ok(text.includes('発狂曲A'), 'all scores should reappear once search is cleared');
-      assert.ok(text.includes('発狂曲B'), 'all scores should reappear once search is cleared');
+assert.ok(text.includes('発狂曲B'), 'all scores should reappear once search is cleared');
+    });
+  });
+
   // ── recommend nudge ──────────────────────────────────────────────────────────
 
   describe('recommend nudge', () => {

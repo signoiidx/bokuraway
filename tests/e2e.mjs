@@ -271,6 +271,69 @@ describe('bokuraway e2e', async () => {
     });
   });
 
+  // ── XSS protection ───────────────────────────────────────────────────────────
+
+  describe('XSS protection', () => {
+    it('escapes HTML in untrusted song title/artist instead of executing it', async () => {
+      const malicious = {
+        chartID: 'xss1',
+        scoreData: { lamp: 'CLEAR' },
+        chart: {
+          levelNum: 1,
+          difficulty: 'CHART',
+          songTitle: '<img src=x onerror="window.__xssFired = true">',
+          artist: '<b>evil</b>',
+          data: { hashMD5: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb99' },
+        },
+      };
+      await page.evaluate((score) => {
+        window.__xssFired = false;
+        window.__test.setScores([score]);
+        window.__test.renderScoreList();
+      }, malicious);
+      await page.waitForTimeout(150);
+
+      const fired = await page.evaluate(() => window.__xssFired);
+      assert.equal(fired, false, 'injected onerror handler must not execute');
+
+      const html = await page.evaluate(() => document.getElementById('score-list').innerHTML);
+      assert.ok(html.includes('&lt;img'), 'title should be rendered as escaped text, not a live <img> tag');
+      assert.ok(html.includes('&lt;b&gt;evil&lt;/b&gt;'), 'artist should be escaped too');
+    });
+  });
+
+  // ── score search ─────────────────────────────────────────────────────────────
+
+  describe('score search', () => {
+    before(async () => {
+      await page.evaluate(({ scores }) => {
+        window.__test.setScores(scores);
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        const navScores = [...document.querySelectorAll('.nav-item')].find(el => el.dataset.page === 'scores');
+        navScores.classList.add('active');
+        document.getElementById('page-scores').classList.add('active');
+        window.__test.renderScoreList();
+      }, { scores: MOCK_SCORES });
+    });
+
+    it('filters the score list by title/artist substring', async () => {
+      await page.fill('#score-search', 'ArtistB');
+      await page.waitForTimeout(150);
+      const text = await page.evaluate(() => document.getElementById('score-list').innerText);
+      assert.ok(text.includes('発狂曲B'), 'matching title should remain visible');
+      assert.ok(!text.includes('発狂曲A'), 'non-matching title should be filtered out');
+    });
+
+    it('clearing the search box restores the full list', async () => {
+      await page.fill('#score-search', '');
+      await page.waitForTimeout(150);
+      const text = await page.evaluate(() => document.getElementById('score-list').innerText);
+      assert.ok(text.includes('発狂曲A'), 'all scores should reappear once search is cleared');
+assert.ok(text.includes('発狂曲B'), 'all scores should reappear once search is cleared');
+    });
+  });
+
   // ── recommend nudge ──────────────────────────────────────────────────────────
 
   describe('recommend nudge', () => {
@@ -320,9 +383,9 @@ describe('bokuraway e2e', async () => {
     });
   });
 
-  // ── search filter ────────────────────────────────────────────────────────────
+  // ── table search ─────────────────────────────────────────────────────────────
 
-  describe('search filter', () => {
+  describe('table search', () => {
     before(async () => {
       await page.evaluate(({ scores, entries }) => {
         window.__test.setScores(scores);
@@ -332,15 +395,6 @@ describe('bokuraway e2e', async () => {
         document.getElementById('page-scores').classList.add('active');
         window.__test.renderScoreList();
       }, { scores: MOCK_SCORES, entries: MOCK_TABLE_ENTRIES });
-    });
-
-    it('score list narrows to a matching title', async () => {
-      await page.fill('#score-search', '発狂曲A');
-      await page.waitForTimeout(100);
-      const text = await page.evaluate(() => document.getElementById('score-list')?.innerText ?? '');
-      assert.ok(text.includes('発狂曲A'), 'matching title should remain');
-      assert.ok(!text.includes('発狂曲B'), 'non-matching title should be filtered out');
-      await page.screenshot({ path: path.join(SHOT_DIR, '04-score-search.png') });
     });
 
     it('score list matches artist name case-insensitively', async () => {
@@ -356,13 +410,8 @@ describe('bokuraway e2e', async () => {
       await page.waitForTimeout(100);
       const text = await page.evaluate(() => document.getElementById('score-list')?.innerText ?? '');
       assert.ok(text.includes('該当するスコアがありません'), 'empty message should be shown');
-    });
-
-    it('clearing the query restores the full list', async () => {
       await page.fill('#score-search', '');
       await page.waitForTimeout(100);
-      const text = await page.evaluate(() => document.getElementById('score-list')?.innerText ?? '');
-      assert.ok(text.includes('発狂曲A') && text.includes('発狂曲B'), 'all scores should be back');
     });
 
     it('table view filters played rows and keeps matching unplayed rows', async () => {

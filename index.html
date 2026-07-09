@@ -64,6 +64,22 @@
     color: var(--muted);
     -webkit-app-region: no-drag;
   }
+  #btn-logout {
+    margin-left: 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--muted);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    transition: color .15s, border-color .15s;
+  }
+  #btn-logout:hover { color: var(--text); border-color: var(--accent2); }
 
   /* ── layout ── */
   #app { flex: 1; display: flex; overflow: hidden; }
@@ -289,25 +305,22 @@
     color: var(--muted);
   }
 
-  /* ── search box ── */
+  /* ── search input ── */
   .search-input {
-    display: block;
-    width: 100%;
-    max-width: 360px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 7px 12px;
+    border-radius: 4px;
+    padding: 6px 12px;
     font-family: 'Noto Sans JP', sans-serif;
     font-size: 12px;
     color: var(--text);
     margin-bottom: 14px;
-    outline: none;
-    transition: border-color .15s;
+    width: 100%;
+    max-width: 320px;
+    display: block;
   }
-  .search-input:focus { border-color: var(--accent); }
   .search-input::placeholder { color: var(--muted); }
-  .search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+  .search-input:focus { outline: none; border-color: var(--accent); }
 
   /* ── filter bar ── */
   .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -416,6 +429,7 @@
 <div id="titlebar">
   <span class="logo">BOKURAWAY</span>
   <span class="user-info" id="user-chip"></span>
+  <button id="btn-logout" style="display:none">ログアウト</button>
 </div>
 
 <div id="app">
@@ -482,7 +496,7 @@
           <button class="tab" data-table="stella">Stella</button>
           <button class="tab" data-table="overjoy">Overjoy</button>
         </div>
-        <input type="search" class="search-input" id="table-search" placeholder="曲名・アーティスト名で検索">
+        <input type="text" class="search-input" id="table-search" placeholder="曲名・アーティストで検索…">
         <div id="table-stats" class="stat-grid"></div>
         <div class="score-list" id="table-list">
           <div class="status dot-loader">読み込み中</div>
@@ -493,7 +507,7 @@
       <div class="page" id="page-scores">
         <div class="page-title">SCORE LIST</div>
         <div class="page-sub">ベストスコア一覧</div>
-        <input type="search" class="search-input" id="score-search" placeholder="曲名・アーティスト名で検索">
+        <input type="text" class="search-input" id="score-search" placeholder="曲名・アーティストで検索…">
         <div class="filter-bar" id="score-filter-bar"></div>
         <div class="score-list" id="score-list">
           <div class="status dot-loader">読み込み中</div>

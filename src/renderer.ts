@@ -22,6 +22,8 @@ interface TachiAPI {
   getRecommend(userID: number | string): Promise<RecommendData>;
   getStats(userID: number | string): Promise<StatsData>;
   getTableData(): Promise<Record<string, DiffTableEntry[]>>;
+  logout(): Promise<{ success: boolean }>;
+  onPBsUpdated(cb: () => void): void;
 }
 
 // e2e テスト専用フック。通常のアプリフローからは呼ばれない
@@ -63,6 +65,39 @@ const LAMP_ORDER: Record<LampCategory, number> = {
 const el = <T extends HTMLElement = HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
 
+// ── security helpers ────────────────────────────────────────────────────────────
+// Song/chart metadata (titles, artists, difficulty table labels) comes from external
+// sources (Bokutachi API, third-party BMS difficulty tables) and is untrusted —
+// escape before interpolating into innerHTML to avoid XSS.
+const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function escapeHtml(str: unknown): string {
+  return String(str ?? '').replace(/[&<>"']/g, c => HTML_ESCAPES[c]);
+}
+
+function isAuthExpiredError(e: unknown): boolean {
+  const message = (e as { message?: unknown } | null)?.message;
+  return typeof message === 'string' && message.includes('AUTH_EXPIRED');
+}
+
+async function handleAuthExpired(): Promise<void> {
+  try { await window.tachi.logout(); } catch { /* best effort */ }
+  resetToAuthScreen('セッションの有効期限が切れました。再度ログインしてください。');
+}
+
+function resetToAuthScreen(message: string): void {
+  currentUser = null;
+  recommendData = null;
+  allScores = null;
+  statsData = null;
+  tableIndex = new Map();
+  tableDataLoaded = false;
+  el('user-chip').textContent = '';
+  el('btn-logout').style.display = 'none';
+  el('main-screen').classList.remove('active');
+  el('auth-screen').style.display = '';
+  el('auth-status').textContent = message || '';
+}
+
 // ── nav ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll<HTMLElement>('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
@@ -76,22 +111,39 @@ document.querySelectorAll<HTMLElement>('.nav-item').forEach(item => {
 
 // ── auth ─────────────────────────────────────────────────────────────────────
 el('btn-login').addEventListener('click', async () => {
+  const btn    = el<HTMLButtonElement>('btn-login');
   const status = el('auth-status');
+  btn.disabled = true;
   status.textContent = 'ブラウザを開いています…';
-  const result = await window.tachi.startOAuth();
-  if (!result.success) { status.textContent = 'エラー: ' + result.error; return; }
-  status.textContent = 'ユーザー情報を取得中…';
   try {
+    const result = await window.tachi.startOAuth();
+    if (!result.success) { status.textContent = 'エラー: ' + result.error; return; }
+    status.textContent = 'ユーザー情報を取得中…';
     const me = await window.tachi.getMe();
     currentUser = me.user ?? me;
     el('user-chip').textContent = currentUser.username;
+    el('btn-logout').style.display = '';
     el('auth-screen').style.display = 'none';
     el('main-screen').classList.add('active');
     Promise.all([loadRecommend(), loadStats(), loadScores()]);
     loadTableData();
   } catch {
     status.textContent = 'ユーザー情報の取得に失敗しました';
+  } finally {
+    btn.disabled = false;
   }
+});
+
+el('btn-logout').addEventListener('click', async () => {
+  try { await window.tachi.logout(); } catch { /* best effort */ }
+  resetToAuthScreen('');
+});
+
+// キャッシュ起動後のバックグラウンド更新で差分が見つかったら各ページを再読込
+window.tachi?.onPBsUpdated?.(() => {
+  if (!currentUser) return;
+  console.log('PBs updated in background — reloading pages');
+  Promise.all([loadRecommend(), loadStats(), loadScores()]);
 });
 
 // ── search ───────────────────────────────────────────────────────────────────
@@ -101,11 +153,6 @@ function matchesQuery(query: string, ...fields: (string | undefined)[]): boolean
   const q = query.toLowerCase();
   return fields.some(f => (f || '').toLowerCase().includes(q));
 }
-
-el<HTMLInputElement>('score-search').addEventListener('input', e => {
-  scoreSearchQuery = (e.target as HTMLInputElement).value.trim();
-  renderScoreList();
-});
 
 el<HTMLInputElement>('table-search').addEventListener('input', e => {
   tableSearchQuery = (e.target as HTMLInputElement).value.trim();
@@ -162,10 +209,10 @@ function scoreItemHTML(s: TachiPB, rank: number, lvLabel?: string): string {
     <div class="score-item">
       <div class="score-rank">${rank}</div>
       <div>
-        <div class="score-title">${title}</div>
-        ${artist ? `<div class="score-artist">${artist}</div>` : ''}
+        <div class="score-title">${escapeHtml(title)}</div>
+        ${artist ? `<div class="score-artist">${escapeHtml(artist)}</div>` : ''}
         <div class="score-meta">
-          <span class="lv-badge">${lv}</span>
+          <span class="lv-badge">${escapeHtml(lv)}</span>
           ${bp != null ? `<span class="bp-badge">BP ${bp}</span>` : ''}
           ${s.nudge ? `<span class="nudge-badge">🔔 ${s.nudge.reason}</span>` : ''}
         </div>
@@ -179,8 +226,8 @@ function unchartedItemHTML(entry: DiffTableEntry, rank: number): string {
     <div class="score-item uncharted">
       <div class="score-rank">${rank}</div>
       <div>
-        <div class="score-title">${entry.title || '(no title)'}</div>
-        <div class="score-meta"><span class="lv-badge">${entry.level}</span></div>
+        <div class="score-title">${escapeHtml(entry.title || '(no title)')}</div>
+        <div class="score-meta"><span class="lv-badge">${escapeHtml(entry.level)}</span></div>
       </div>
       <div class="score-right"><span class="lamp-badge lamp-NOPLAY">NO PLAY</span></div>
     </div>`;
@@ -212,7 +259,8 @@ async function loadRecommend(): Promise<void> {
       </div>`;
     renderRecommendList();
   } catch (e) {
-    list.innerHTML = `<div class="status">取得エラー: ${(e as Error).message}</div>`;
+    if (isAuthExpiredError(e)) { handleAuthExpired(); return; }
+    list.innerHTML = `<div class="status">取得エラー: ${escapeHtml((e as Error).message)}</div>`;
   }
 }
 
@@ -295,7 +343,8 @@ async function loadStats(): Promise<void> {
 
     wrap.innerHTML = `<table class="stats-table"><thead>${header}</thead><tbody>${rows}</tbody></table>`;
   } catch (e) {
-    wrap.innerHTML = `<div class="status">取得エラー: ${(e as Error).message}</div>`;
+    if (isAuthExpiredError(e)) { handleAuthExpired(); return; }
+    wrap.innerHTML = `<div class="status">取得エラー: ${escapeHtml((e as Error).message)}</div>`;
   }
 }
 
@@ -342,18 +391,30 @@ async function loadScores(): Promise<void> {
     renderScoreList();
     if (el('page-tables').classList.contains('active')) renderTableView();
   } catch (e) {
-    list.innerHTML = `<div class="status">取得エラー: ${(e as Error).message}</div>`;
+    if (isAuthExpiredError(e)) { handleAuthExpired(); return; }
+    list.innerHTML = `<div class="status">取得エラー: ${escapeHtml((e as Error).message)}</div>`;
   }
 }
+
+el<HTMLInputElement>('score-search').addEventListener('input', e => {
+  scoreSearchQuery = (e.target as HTMLInputElement).value.trim().toLowerCase();
+  renderScoreList();
+});
 
 function renderScoreList(): void {
   if (!allScores) return;
   const list = el('score-list');
-  const lampFiltered = activeScoreLamp === 'ALL'
+  let filtered = activeScoreLamp === 'ALL'
     ? allScores
     : allScores.filter(s => lampCat(s.scoreData?.lamp) === activeScoreLamp);
-  const filtered = lampFiltered.filter(s =>
-    matchesQuery(scoreSearchQuery, s.chart?.songTitle, s.chart?.artist));
+
+  if (scoreSearchQuery) {
+    filtered = filtered.filter(s => {
+      const title  = (s.chart?.songTitle || '').toLowerCase();
+      const artist = (s.chart?.artist    || '').toLowerCase();
+      return title.includes(scoreSearchQuery) || artist.includes(scoreSearchQuery);
+    });
+  }
 
   if (filtered.length === 0) {
     list.innerHTML = '<div class="status">該当するスコアがありません</div>';
@@ -385,7 +446,8 @@ async function loadTableData(): Promise<void> {
     tableDataLoaded = true;
     renderTableView();
   } catch (e) {
-    el('table-list').innerHTML = `<div class="status">難易度表の取得に失敗: ${(e as Error).message}</div>`;
+    if (isAuthExpiredError(e)) { handleAuthExpired(); return; }
+    el('table-list').innerHTML = `<div class="status">難易度表の取得に失敗: ${escapeHtml((e as Error).message)}</div>`;
   }
 }
 
@@ -477,7 +539,7 @@ function renderTableView(): void {
     return `
       <div class="level-section">
         <div class="level-header">
-          <span>${symbol}${lv}</span>
+          <span>${escapeHtml(symbol)}${lv}</span>
           <div class="level-progress"><div class="level-progress-fill" style="width:${hardPct}%"></div></div>
           <span class="level-count">${played.length} / ${total}曲</span>
         </div>

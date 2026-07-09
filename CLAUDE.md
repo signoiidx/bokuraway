@@ -28,9 +28,10 @@ Screenshots are written to `tests/shots/` (gitignored) on each run.
 
 The app follows Electron's standard main/renderer split with context isolation:
 
-- **`src/main.ts`** — Main process. Creates the `BrowserWindow`, runs an OAuth callback server on `http://localhost:8080/callback`, and exposes six IPC handlers: `oauth-start`, `get-me`, `get-scores`, `get-recommend`, `get-stats`, `get-table-data`. All Bokutachi API calls go through `tachiGet()` using the stored `accessToken`. Difficulty table data is fetched from external JSON endpoints via `fetchBmsTable()`.
+- **`src/main.ts`** — Main process. Creates the `BrowserWindow`, runs an OAuth callback server on `http://localhost:8080/callback`, and exposes six IPC handlers: `oauth-start`, `get-me`, `get-scores`, `get-recommend`, `get-stats`, `get-table-data`. All Bokutachi API calls go through `tachiGet()` using the stored `accessToken`. Difficulty table data is fetched from external JSON endpoints via `fetchBmsTable()`. PB and table responses are cached on disk (see "Local cache" below).
+- **`src/cache.ts`** — Minimal JSON disk cache (`userData/cache/<key>.json`, `{ savedAt, data }`), main-process only, with optional TTL on read.
 - **`src/nudge.ts`** — Pure module with the lamp helpers (`lampCat`, `LAMP_ORDER`) and the nudge logic (`computeNudges`). No Electron imports, so `tests/nudge.test.mjs` unit-tests the compiled `dist/nudge.js` directly without launching the app.
-- **`src/preload.ts`** — Context bridge. Exposes `window.tachi` to the renderer with six methods: `startOAuth`, `getMe`, `getScores`, `getRecommend`, `getStats`, `getTableData`. `nodeIntegration` is disabled.
+- **`src/preload.ts`** — Context bridge. Exposes `window.tachi` to the renderer with seven invoke methods (`startOAuth`, `getMe`, `getScores`, `getRecommend`, `getStats`, `getTableData`, `logout`) plus `onPBsUpdated(cb)`, which subscribes to the `pbs-updated` push event. `nodeIntegration` is disabled.
 - **`src/renderer.ts`** — Renderer logic, loaded by `index.html` as `<script src="./dist/renderer.js">`. Handles the auth screen, sidebar navigation, and four pages: "レコメンド" (Recommend), "スコア一覧" (Score List), "統計" (Stats), "難易度表" (Difficulty Tables). Written as a **non-module script** (no `import`/`export`) so plain `tsc` output runs in the context-isolated renderer without a bundler; the implementation is wrapped in an IIFE and only `window.__test` is exposed.
 - **`src/types.ts`** — Shared type declarations (`TachiPB`, `DiffTableEntry`, `RecommendData`, `StatsData`, …). Also a global script with no `import`/`export`, so both the module-based `main.ts` and the non-module `renderer.ts` see the types without imports. Type-only; the emitted `dist/types.js` is unused.
 - **`index.html`** — Markup + CSS only. No framework or bundler.
@@ -69,6 +70,13 @@ Credentials (`CLIENT_ID`, `CLIENT_SECRET`) are read from `.env` via `dotenv`.
 - **BMS difficulty:** BMS 7K has only one difficulty value: `"CHART"`. This is correct and intentional — each BMS file is its own standalone chart.
 - **BMS level:** Charts not listed in any difficulty table have `levelNum: 0`. Charts with table entries (insane, satellite, etc.) carry their actual level.
 - **Chart extra data:** `chart.data.hashMD5` is used to match scores against difficulty table entries. `chart.data.aiLevel` carries the AI-estimated level string. `scoreData.optional.bp` holds the Bad Point count.
+
+## Local cache
+
+To make startup fast, `main.ts` caches API responses on disk via `src/cache.ts`:
+
+- **PBs** (`get-scores` / `get-recommend` / `get-stats` all share `fetchPBs()`): if a disk cache exists it is returned immediately and a background refresh is kicked off (once per user per session, guarded by `pbsRefreshing`); when the fresh response differs, the cache is updated and `pbs-updated` is sent to the renderer, which reloads all three pages. An in-memory copy (`pbsMemo`) prevents re-fetch loops within a session.
+- **Difficulty tables** (`get-table-data`): cached with a 24h TTL. A fully-failed fetch (all four tables empty) is not cached, so the next launch retries.
 
 ## Recommend logic
 
@@ -112,7 +120,7 @@ The difficulty table view groups scores by level, shows played charts with their
 
 ## Search
 
-The score list and difficulty table pages each have a `.search-input` box (`#score-search`, `#table-search`) that filters by song title or artist (case-insensitive substring, `matchesQuery()`) as you type. The table view applies the query to played and unplayed rows while keeping the level grouping; unplayed entries only match on title (table data has no artist).
+The score list and difficulty table pages each have a `.search-input` box (`#score-search`, `#table-search`) that filters by song title or artist (case-insensitive substring) as you type. The table view uses `matchesQuery()` and applies the query to played and unplayed rows while keeping the level grouping; unplayed entries only match on title (table data has no artist). Level sections with no matches disappear.
 
 ## Lamp colors
 

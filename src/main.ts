@@ -20,14 +20,7 @@ let accessToken: string | null = null;
 let callbackServer: http.Server | null = null;
 
 // ─── Difficulty table fetching ────────────────────────────────────────────────
-
-interface DiffTableEntry {
-  md5: string;
-  title: string;
-  level: string;
-  levelNum: number;
-  table: string;
-}
+// DiffTableEntry などの共有型は src/types.ts (グローバル宣言) を参照
 
 interface DiffTableConfig {
   id: string;
@@ -67,45 +60,6 @@ async function fetchBmsTable(config: DiffTableConfig): Promise<DiffTableEntry[]>
 }
 
 // ─── Data helpers ─────────────────────────────────────────────────────────────
-
-interface TachiSong {
-  id: string;
-  title: string;
-  artist: string;
-}
-
-interface TachiChart {
-  chartID: string;
-  level: string;
-  levelNum: number;
-  difficulty: string;
-  song?: TachiSong;
-  data?: {
-    hashMD5?: string;
-    hashSHA256?: string;
-    aiLevel?: string;
-    tableFolders?: Record<string, string>;
-    notecount?: number;
-  };
-}
-
-interface TachiScoreData {
-  lamp?: string;
-  percent?: number;
-  optional?: { bp?: number | null };
-}
-
-interface TachiPB {
-  chartID: string;
-  scoreData?: TachiScoreData;
-  chart?: TachiChart & { songTitle: string; artist: string };
-}
-
-interface TachiPBsResponse {
-  pbs?: TachiPB[];
-  charts?: TachiChart[];
-  songs?: TachiSong[];
-}
 
 function joinedPBs(data: TachiPBsResponse): TachiPB[] {
   const chartMap = new Map((data.charts ?? []).map(c => [c.chartID, c]));

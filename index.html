@@ -289,6 +289,26 @@
     color: var(--muted);
   }
 
+  /* ── search box ── */
+  .search-input {
+    display: block;
+    width: 100%;
+    max-width: 360px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 12px;
+    color: var(--text);
+    margin-bottom: 14px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--muted); }
+  .search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+
   /* ── filter bar ── */
   .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
   .filter-btn {
@@ -462,6 +482,7 @@
           <button class="tab" data-table="stella">Stella</button>
           <button class="tab" data-table="overjoy">Overjoy</button>
         </div>
+        <input type="search" class="search-input" id="table-search" placeholder="曲名・アーティスト名で検索">
         <div id="table-stats" class="stat-grid"></div>
         <div class="score-list" id="table-list">
           <div class="status dot-loader">読み込み中</div>
@@ -472,6 +493,7 @@
       <div class="page" id="page-scores">
         <div class="page-title">SCORE LIST</div>
         <div class="page-sub">ベストスコア一覧</div>
+        <input type="search" class="search-input" id="score-search" placeholder="曲名・アーティスト名で検索">
         <div class="filter-bar" id="score-filter-bar"></div>
         <div class="score-list" id="score-list">
           <div class="status dot-loader">読み込み中</div>
@@ -490,6 +512,8 @@ let allScores         = null;
 let statsData         = null;
 let activeRecommendTab = 'nudges';
 let activeScoreLamp   = 'ALL';
+let scoreSearchQuery  = '';
+let tableSearchQuery  = '';
 
 const LAMP_ORDER = { FAILED: 0, ASSIST: 1, EASY: 2, CLEAR: 3, HARD: 4, EXHARD: 5, FC: 6 };
 
@@ -522,6 +546,24 @@ document.getElementById('btn-login').addEventListener('click', async () => {
   } catch(e) {
     status.textContent = 'ユーザー情報の取得に失敗しました';
   }
+});
+
+// ── search ───────────────────────────────────────────────────────────────────
+// 曲名・アーティスト名の部分一致 (大文字小文字無視)。query が空なら常に true
+function matchesQuery(query, ...fields) {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  return fields.some(f => (f || '').toLowerCase().includes(q));
+}
+
+document.getElementById('score-search').addEventListener('input', e => {
+  scoreSearchQuery = e.target.value.trim();
+  renderScoreList();
+});
+
+document.getElementById('table-search').addEventListener('input', e => {
+  tableSearchQuery = e.target.value.trim();
+  renderTableView();
 });
 
 // ── lamp helpers ──────────────────────────────────────────────────────────────
@@ -757,10 +799,12 @@ async function loadScores() {
 
 function renderScoreList() {
   if (!allScores) return;
-  const list     = document.getElementById('score-list');
-  const filtered = activeScoreLamp === 'ALL'
+  const list       = document.getElementById('score-list');
+  const lampFiltered = activeScoreLamp === 'ALL'
     ? allScores
     : allScores.filter(s => lampCat(s.scoreData?.lamp) === activeScoreLamp);
+  const filtered = lampFiltered.filter(s =>
+    matchesQuery(scoreSearchQuery, s.chart?.songTitle, s.chart?.artist));
 
   if (filtered.length === 0) {
     list.innerHTML = '<div class="status">該当するスコアがありません</div>';
@@ -806,8 +850,10 @@ function renderTableView() {
     return;
   }
 
-  // Match played scores against the active table
-  const mapped = allScores.map(s => {
+  // Match played scores against the active table.
+  // 検索クエリはプレイ済み・未プレイの両方に適用する (レベルグルーピングは維持)
+  const matchesSearch = s => matchesQuery(tableSearchQuery, s.chart?.songTitle, s.chart?.artist);
+  const mapped = allScores.filter(matchesSearch).map(s => {
     const allEntries = tableIndex.get((s.chart?.data?.hashMD5 || '').toLowerCase()) ?? [];
     return { s, entry: allEntries.find(e => e.table === activeTableTab) ?? null };
   });
@@ -821,7 +867,9 @@ function renderTableView() {
   const unplayedEntries = [];
   for (const [md5, entries] of tableIndex) {
     const entry = entries.find(e => e.table === activeTableTab);
-    if (entry && !playedMD5s.has(md5)) unplayedEntries.push(entry);
+    if (entry && !playedMD5s.has(md5) && matchesQuery(tableSearchQuery, entry.title)) {
+      unplayedEntries.push(entry);
+    }
   }
 
   const counts = { FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 };
@@ -841,7 +889,9 @@ function renderTableView() {
     </div>`).join('');
 
   if (tableScores.length === 0 && unplayedEntries.length === 0) {
-    listEl.innerHTML = '<div class="status">このテーブルのスコアがありません</div>';
+    listEl.innerHTML = tableSearchQuery
+      ? '<div class="status">検索に一致する譜面がありません</div>'
+      : '<div class="status">このテーブルのスコアがありません</div>';
     return;
   }
 
@@ -931,6 +981,8 @@ window.__test = {
     tableDataLoaded = true;
   },
   setActiveTableTab: (tab) => { activeTableTab = tab; },
+  setScoreSearchQuery: (q) => { scoreSearchQuery = q; },
+  setTableSearchQuery: (q) => { tableSearchQuery = q; },
   renderTableView,
   renderScoreList,
 };

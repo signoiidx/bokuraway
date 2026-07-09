@@ -45,6 +45,8 @@ window.__test = {
   renderRecommendList(),
   setTableData(entries),      // builds tableIndex (Map<md5, entry[]>) and sets tableDataLoaded = true
   setActiveTableTab(tab),     // sets activeTableTab
+  setScoreSearchQuery(q),     // sets scoreSearchQuery (score list search box state)
+  setTableSearchQuery(q),     // sets tableSearchQuery (table view search box state)
   renderTableView(),
   renderScoreList(),
 }
@@ -105,6 +107,10 @@ Each table's `header.json` is fetched → resolves `data_url` → downloads the 
 In the renderer, `tableIndex` is `Map<md5, DiffTableEntry[]>` (a chart can appear in multiple tables). `getTableLabels(s)` returns all matching level strings joined with ` / ` (e.g. `★11 / sl7`), or `"-"` if the chart is in no table.
 
 The difficulty table view groups scores by level, shows played charts with their lamp and BP, and renders unplayed table entries as dimmed NO PLAY rows. A thin progress bar in each level header shows the HARD+ rate.
+
+## Search
+
+The score list and difficulty table pages each have a `.search-input` box (`#score-search`, `#table-search`) that filters by song title or artist (case-insensitive substring, `matchesQuery()`) as you type. The table view applies the query to played and unplayed rows while keeping the level grouping; unplayed entries only match on title (table data has no artist).
 
 ## Lamp colors
 

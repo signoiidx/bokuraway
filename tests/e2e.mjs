@@ -319,4 +319,77 @@ describe('bokuraway e2e', async () => {
       assert.ok(content.includes('「あと一歩」の譜面が見つかりません'), 'empty nudge message should be shown');
     });
   });
+
+  // ── search filter ────────────────────────────────────────────────────────────
+
+  describe('search filter', () => {
+    before(async () => {
+      await page.evaluate(({ scores, entries }) => {
+        window.__test.setScores(scores);
+        window.__test.setTableData(entries);
+        window.__test.setActiveTableTab('insane');
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById('page-scores').classList.add('active');
+        window.__test.renderScoreList();
+      }, { scores: MOCK_SCORES, entries: MOCK_TABLE_ENTRIES });
+    });
+
+    it('score list narrows to a matching title', async () => {
+      await page.fill('#score-search', '発狂曲A');
+      await page.waitForTimeout(100);
+      const text = await page.evaluate(() => document.getElementById('score-list')?.innerText ?? '');
+      assert.ok(text.includes('発狂曲A'), 'matching title should remain');
+      assert.ok(!text.includes('発狂曲B'), 'non-matching title should be filtered out');
+      await page.screenshot({ path: path.join(SHOT_DIR, '04-score-search.png') });
+    });
+
+    it('score list matches artist name case-insensitively', async () => {
+      await page.fill('#score-search', 'artistb');
+      await page.waitForTimeout(100);
+      const text = await page.evaluate(() => document.getElementById('score-list')?.innerText ?? '');
+      assert.ok(text.includes('発狂曲B'), 'artist match should remain');
+      assert.ok(!text.includes('発狂曲A'), 'non-matching artist should be filtered out');
+    });
+
+    it('shows empty message when nothing matches', async () => {
+      await page.fill('#score-search', 'zzz-no-match');
+      await page.waitForTimeout(100);
+      const text = await page.evaluate(() => document.getElementById('score-list')?.innerText ?? '');
+      assert.ok(text.includes('該当するスコアがありません'), 'empty message should be shown');
+    });
+
+    it('clearing the query restores the full list', async () => {
+      await page.fill('#score-search', '');
+      await page.waitForTimeout(100);
+      const text = await page.evaluate(() => document.getElementById('score-list')?.innerText ?? '');
+      assert.ok(text.includes('発狂曲A') && text.includes('発狂曲B'), 'all scores should be back');
+    });
+
+    it('table view filters played rows and keeps matching unplayed rows', async () => {
+      await page.evaluate(() => {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById('page-tables').classList.add('active');
+        window.__test.renderTableView();
+      });
+      await page.fill('#table-search', '未挑戦');
+      await page.waitForTimeout(100);
+      const text = await page.evaluate(() => document.getElementById('table-list')?.innerText ?? '');
+      assert.ok(text.includes('未挑戦曲'), 'matching unplayed entry should remain');
+      assert.ok(!text.includes('発狂曲A'), 'non-matching played chart should be filtered out');
+      await page.screenshot({ path: path.join(SHOT_DIR, '05-table-search.png') });
+    });
+
+    it('table view keeps level grouping for matches', async () => {
+      await page.fill('#table-search', '発狂曲B');
+      await page.waitForTimeout(100);
+      const headers = await page.evaluate(() =>
+        [...document.querySelectorAll('#page-tables .level-header span:first-child')]
+          .map(el => el.textContent.trim())
+      );
+      assert.ok(headers.includes('★12'), '★12 section should remain for the match');
+      assert.ok(!headers.includes('★11'), '★11 section should disappear');
+      await page.fill('#table-search', '');
+      await page.waitForTimeout(100);
+    });
+  });
 });

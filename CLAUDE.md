@@ -110,7 +110,7 @@ The difficulty table view groups scores by level, shows played charts with their
 
 ## Search
 
-The score list and difficulty table pages each have a `.search-input` box (`#score-search`, `#table-search`) that filters by song title or artist (case-insensitive substring, `matchesQuery()`) as you type. The table view applies the query to played and unplayed rows while keeping the level grouping; unplayed entries only match on title (table data has no artist).
+The score list and difficulty table pages each have a `.search-input` box (`#score-search`, `#table-search`) that filters by song title or artist (case-insensitive substring) as you type. The table view uses `matchesQuery()` and applies the query to played and unplayed rows while keeping the level grouping; unplayed entries only match on title (table data has no artist). Level sections with no matches disappear.
 
 ## Lamp colors
 

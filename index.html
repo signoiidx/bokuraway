@@ -174,6 +174,7 @@
   .stat-value.c-hard   { color: var(--c-hard); }
   .stat-value.c-clear  { color: var(--c-clear); }
   .stat-value.c-easy   { color: var(--c-easy); }
+  .stat-value.c-accent { color: var(--accent); }
 
   /* ── tab bar ── */
   .tab-bar {
@@ -237,6 +238,16 @@
   }
   .score-meta { font-size: 11px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .bp-badge { font-size: 10px; color: var(--muted); }
+  .nudge-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent);
+    background: rgba(124,106,255,.12);
+    border: 1px solid rgba(124,106,255,.3);
+    border-radius: 3px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
   .score-item.uncharted { opacity: 0.45; }
   .score-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 
@@ -422,8 +433,9 @@
         <div class="page-sub">上達のための次の一手をレコメンド</div>
         <div id="recommend-stats" class="stat-grid"></div>
         <div class="tab-bar">
-          <button class="tab active" data-tab="toHard">HARD CLEAR 狙い</button>
-          <button class="tab" data-tab="toClear">CLEAR 狙い</button>
+          <button class="tab active" data-tab="nudges">🔔 あと一歩</button>
+          <button class="tab" data-tab="toHard">HARD CLEAR 狙い</button>
+          <button class="tab" data-tab="toEasy">EASY CLEAR 狙い</button>
         </div>
         <div class="score-list" id="recommend-list">
           <div class="status dot-loader">読み込み中</div>
@@ -476,7 +488,7 @@ let currentUser       = null;
 let recommendData     = null;
 let allScores         = null;
 let statsData         = null;
-let activeRecommendTab = 'toHard';
+let activeRecommendTab = 'nudges';
 let activeScoreLamp   = 'ALL';
 
 const LAMP_ORDER = { FAILED: 0, ASSIST: 1, EASY: 2, CLEAR: 3, HARD: 4, EXHARD: 5, FC: 6 };
@@ -565,6 +577,7 @@ function scoreItemHTML(s, rank, lvLabel) {
         <div class="score-meta">
           <span class="lv-badge">${lv}</span>
           ${bp != null ? `<span class="bp-badge">BP ${bp}</span>` : ''}
+          ${s.nudge ? `<span class="nudge-badge">🔔 ${s.nudge.reason}</span>` : ''}
         </div>
       </div>
       <div class="score-right">${lampBadge(s.scoreData?.lamp)}</div>
@@ -596,12 +609,16 @@ async function loadRecommend() {
     }
     statsEl.innerHTML = `
       <div class="stat-card">
+        <div class="stat-label">あと一歩</div>
+        <div class="stat-value c-accent">${(recommendData.nudges ?? []).length}</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-label">HARD CLEAR 候補</div>
         <div class="stat-value c-hard">${recommendData.toHard.length}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">CLEAR 候補</div>
-        <div class="stat-value c-clear">${recommendData.toClear.length}</div>
+        <div class="stat-label">EASY CLEAR 候補</div>
+        <div class="stat-value c-easy">${recommendData.toEasy.length}</div>
       </div>`;
     renderRecommendList();
   } catch(e) {
@@ -614,9 +631,11 @@ function renderRecommendList() {
   const list   = document.getElementById('recommend-list');
   const scores = recommendData[activeRecommendTab] ?? [];
   if (scores.length === 0) {
-    const msg = activeRecommendTab === 'toHard'
-      ? 'HARD CLEAR候補がありません。CLEAR数を増やしましょう！'
-      : 'CLEAR候補がありません。';
+    const msg = activeRecommendTab === 'nudges'
+      ? '「あと一歩」の譜面が見つかりません。BP率の低い譜面やグレード境界（A/AA/AAA）に近い譜面がここに表示されます。'
+      : activeRecommendTab === 'toHard'
+        ? 'HARD CLEAR候補がありません。EASY CLEAR数を増やしましょう！'
+        : 'EASY CLEAR候補がありません。';
     list.innerHTML = `<div class="status">${msg}</div>`;
     return;
   }
@@ -899,6 +918,9 @@ document.querySelectorAll('#page-tables .tab').forEach(btn => {
 // Test interface — only used by e2e tests, not reachable from normal app flow
 window.__test = {
   setScores: (data) => { allScores = data; },
+  setRecommendData: (data) => { recommendData = data; },
+  setActiveRecommendTab: (tab) => { activeRecommendTab = tab; }, // 'nudges' | 'toHard' | 'toEasy'
+  renderRecommendList,
   setTableData: (entries) => {
     tableIndex = new Map();
     for (const e of entries) {

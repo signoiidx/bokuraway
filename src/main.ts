@@ -4,6 +4,7 @@ import http from 'http';
 import path from 'path';
 import axios, { AxiosError } from 'axios';
 import { LampCat, LAMP_ORDER, lampCat, computeNudges } from './nudge';
+import { readCache, writeCache } from './cache';
 
 console.log('CLIENT_ID:', process.env.CLIENT_ID);
 console.log('CLIENT_SECRET:', process.env.CLIENT_SECRET ? '***loaded***' : 'UNDEFINED');
@@ -211,6 +212,51 @@ async function tachiGet(apiPath: string): Promise<unknown> {
   }
 }
 
+// ─── PB fetching with cache ───────────────────────────────────────────────────
+// 起動直後はディスクキャッシュを即座に返してレンダリングを始め、裏で最新を取得。
+// 差分があればキャッシュを更新して 'pbs-updated' をレンダラーに通知する。
+// メモリ上のコピー (pbsMemo) は同一セッション内の再フェッチと通知ループを防ぐ。
+
+const pbsMemo = new Map<number, TachiPBsResponse>();
+const pbsRefreshing = new Set<number>();
+
+function pbsCacheKey(userID: number): string {
+  return `pbs-bms-7k-${userID}`;
+}
+
+async function fetchPBsFresh(userID: number): Promise<TachiPBsResponse> {
+  const fresh = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`) as TachiPBsResponse;
+  pbsMemo.set(userID, fresh);
+  writeCache(pbsCacheKey(userID), fresh);
+  return fresh;
+}
+
+function refreshPBsInBackground(userID: number, cached: TachiPBsResponse): void {
+  if (pbsRefreshing.has(userID)) return;
+  pbsRefreshing.add(userID);
+  fetchPBsFresh(userID)
+    .then(fresh => {
+      if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
+        mainWindow?.webContents.send('pbs-updated');
+      }
+    })
+    .catch(e => console.error('Background PB refresh failed:', (e as AxiosError).message))
+    .finally(() => pbsRefreshing.delete(userID));
+}
+
+async function fetchPBs(userID: number): Promise<TachiPBsResponse> {
+  const memo = pbsMemo.get(userID);
+  if (memo) return memo;
+
+  const cached = readCache<TachiPBsResponse>(pbsCacheKey(userID));
+  if (cached) {
+    refreshPBsInBackground(userID, cached);
+    return cached;
+  }
+
+  return fetchPBsFresh(userID);
+}
+
 // ─── IPC handlers ─────────────────────────────────────────────────────────────
 
 ipcMain.handle('get-me', async () => {
@@ -228,7 +274,7 @@ ipcMain.handle('get-me', async () => {
 ipcMain.handle('get-scores', async (_e, userID: number) => {
   let data: TachiPBsResponse;
   try {
-    data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`) as TachiPBsResponse;
+    data = await fetchPBs(userID);
   } catch (e) {
     if ((e as AxiosError).response?.status === 404) return [];
     throw e;
@@ -242,7 +288,7 @@ ipcMain.handle('get-recommend', async (_e, userID: number) => {
   console.log('get-recommend userID:', userID);
   let data: TachiPBsResponse;
   try {
-    data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`) as TachiPBsResponse;
+    data = await fetchPBs(userID);
   } catch (e) {
     if ((e as AxiosError).response?.status === 404) return { nudges: [], toHard: [], toEasy: [], noProfile: true };
     throw e;
@@ -269,7 +315,7 @@ ipcMain.handle('get-recommend', async (_e, userID: number) => {
 ipcMain.handle('get-stats', async (_e, userID: number) => {
   let data: TachiPBsResponse;
   try {
-    data = await tachiGet(`/users/${userID}/games/bms-7k/pbs/all`) as TachiPBsResponse;
+    data = await fetchPBs(userID);
   } catch (e) {
     if ((e as AxiosError).response?.status === 404) {
       return { byLevel: {}, totals: { FC: 0, EXHARD: 0, HARD: 0, CLEAR: 0, EASY: 0, ASSIST: 0, FAILED: 0 }, total: 0 };
@@ -292,7 +338,16 @@ ipcMain.handle('get-stats', async (_e, userID: number) => {
   return { byLevel, totals, total: (data.pbs ?? []).length };
 });
 
+const TABLE_CACHE_KEY = 'diff-tables';
+const TABLE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
 ipcMain.handle('get-table-data', async () => {
+  const cached = readCache<Record<string, DiffTableEntry[]>>(TABLE_CACHE_KEY, TABLE_CACHE_TTL_MS);
+  if (cached) {
+    console.log('Difficulty tables served from cache');
+    return cached;
+  }
+
   const result: Record<string, DiffTableEntry[]> = {};
   await Promise.allSettled(
     DIFF_TABLE_CONFIGS.map(async config => {
@@ -305,5 +360,9 @@ ipcMain.handle('get-table-data', async () => {
       }
     })
   );
+  // 全テーブル失敗時はキャッシュせず、次回起動で再取得させる
+  if (Object.values(result).some(entries => entries.length > 0)) {
+    writeCache(TABLE_CACHE_KEY, result);
+  }
   return result;
 });
